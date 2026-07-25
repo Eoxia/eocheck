@@ -65,6 +65,7 @@ export function createScan(req, res) {
       scan_id: scanId,
       target_url: url,
       status: 'pending',
+      options: options,
       progress_percent: 5,
       progress_step: 'Demande de scan reçue...',
       status_url: `/api/v1/scans/${scanId}`
@@ -107,22 +108,27 @@ export function getScan(req, res) {
 }
 
 /**
- * List scans (filtered by user if authenticated)
+ * List scans (filtered by user if authenticated, preserving options for each row)
  */
 export function listScans(req, res) {
   try {
     const userId = req.user ? req.user.id : null;
-    let scans = [];
+    let scanRows = [];
 
     if (userId) {
-      scans = db
-        .prepare('SELECT id, target_url, status, progress_percent, progress_step, created_at, completed_at FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
+      scanRows = db
+        .prepare('SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
         .all(userId);
     } else {
-      scans = db
-        .prepare('SELECT id, target_url, status, progress_percent, progress_step, created_at, completed_at FROM scans ORDER BY created_at DESC LIMIT 20')
+      scanRows = db
+        .prepare('SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM scans ORDER BY created_at DESC LIMIT 20')
         .all();
     }
+
+    const scans = scanRows.map(s => ({
+      ...s,
+      options: s.options_json ? JSON.parse(s.options_json) : {}
+    }));
 
     return res.json({ scans });
   } catch (error) {

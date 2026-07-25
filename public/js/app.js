@@ -2,6 +2,7 @@ let currentUser = null;
 let authToken = localStorage.getItem('eocheck_token') || null;
 let currentRawTokenToCopy = '';
 let scanPollingTimer = null;
+let loadedScansCache = {};
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
@@ -262,16 +263,24 @@ function formatDuration(startIso, endIso) {
 }
 
 /**
- * Re-launch a scan for a target URL
+ * Re-launch a scan using the EXACT PRESERVED options of a specific scan row
  */
-async function rescanTarget(targetUrl) {
+async function rescanTargetByScanId(scanId) {
   try {
-    const numPages = parseInt(document.getElementById('scanPages')?.value || 0, 10);
-    const timeout = parseInt(document.getElementById('scanTimeout')?.value || 60, 10);
-    const headless = document.getElementById('scanHeadless')?.checked !== false;
-    const inspectCookies = document.getElementById('scanCookies')?.checked !== false;
-    const inspectTrackers = document.getElementById('scanTrackers')?.checked !== false;
-    const takeScreenshots = document.getElementById('scanScreenshots')?.checked !== false;
+    let originalScan = loadedScansCache[scanId];
+
+    if (!originalScan) {
+      const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
+      const detailRes = await fetch(apiUrl);
+      originalScan = await parseJsonResponse(detailRes);
+    }
+
+    if (!originalScan || !originalScan.target_url) {
+      throw new Error('Impossible de récupérer la ligne de scan d\'origine');
+    }
+
+    const targetUrl = originalScan.target_url;
+    const preservedOptions = originalScan.options || {};
 
     const res = await secureFetch('/api/v1/scans', {
       method: 'POST',
@@ -281,14 +290,14 @@ async function rescanTarget(targetUrl) {
       },
       body: JSON.stringify({
         url: targetUrl,
-        options: { numPages, timeout, headless, inspectCookies, inspectTrackers, takeScreenshots }
+        options: preservedOptions
       })
     });
 
     const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors du relancement du scan');
 
-    showToast(`Scan relancé avec succès ! ID: ${data.scan_id}`, 'success', 5000);
+    showToast(`Scan relancé avec les MÊMES paramètres conservés ! (ID: ${data.scan_id})`, 'success', 5000);
     loadScans();
   } catch (err) {
     showToast(err.message, 'error');
@@ -322,7 +331,7 @@ function openImageLightbox(imgSrc, title) {
 }
 
 /**
- * Load & Render Scans List (Separated Scan Détaillé & Actions Columns)
+ * Load & Render Scans List (Preserving exact parameters for each scan row)
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
@@ -344,6 +353,11 @@ async function loadScans() {
     }
 
     let hasActiveScans = false;
+
+    // Cache scans options by ID
+    data.scans.forEach(s => {
+      loadedScansCache[s.id] = s;
+    });
 
     tbody.innerHTML = data.scans.map(scan => {
       const isProcessing = scan.status === 'processing' || scan.status === 'pending';
@@ -370,7 +384,7 @@ async function loadScans() {
             <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
           </td>
           <td>
-            <button class="btn btn-primary btn-sm" onclick="rescanTarget('${escapeHtml(scan.target_url)}')">🔄 Relancer</button>
+            <button class="btn btn-primary btn-sm" onclick="rescanTargetByScanId('${scan.id}')">🔄 Relancer</button>
           </td>
         </tr>
       `;
@@ -428,7 +442,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal
+ * View Detailed Scan Result Modal (With Preserved Scan Options Summary)
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
@@ -443,6 +457,7 @@ async function viewScanDetails(scanId) {
     const scan = await parseJsonResponse(res);
 
     const result = scan.result || {};
+    const opts = scan.options || {};
     const privacy = result.privacy_inspection || {};
     const scannedUrls = result.scanned_urls || [scan.target_url];
     const screenshots = result.screenshots || [];
@@ -470,6 +485,19 @@ async function viewScanDetails(scanId) {
         <div>
           <span class="form-label">Durée d'Analyse</span>
           <span style="font-weight: 700; color: var(--accent-cyan);">${formatDuration(scan.created_at, scan.completed_at)}</span>
+        </div>
+      </div>
+
+      <!-- Preserved Scan Options Summary Box -->
+      <div style="margin-bottom: 1.25rem; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); padding: 0.85rem; border-radius: var(--radius-sm);">
+        <h4 style="font-size: 0.88rem; color: var(--primary); margin-bottom: 0.4rem;">🎛️ Paramètres Demandés pour ce Scan :</h4>
+        <div style="font-size: 0.82rem; color: var(--text-main); display: flex; flex-wrap: wrap; gap: 1rem;">
+          <span>📄 <b>Pages secondaires (crawl) :</b> ${opts.numPages !== undefined ? opts.numPages : 0}</span>
+          <span>⏱️ <b>Timeout :</b> ${opts.timeout || 60}s</span>
+          <span>🕶️ <b>Headless :</b> ${opts.headless !== false ? 'Oui' : 'Non'}</span>
+          <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
+          <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
+          <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
         </div>
       </div>
 
