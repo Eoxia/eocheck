@@ -17,9 +17,10 @@
     </a>
 
     <div class="nav-tabs" id="navTabs">
-      <a href="scans.html" class="nav-tab">🔍 Scans & Inspecteur</a>
-      <a href="users.html" class="nav-tab active">🔑 Utilisateurs & Clés API</a>
-      <a href="system.html" class="nav-tab">⚙️ Système & Docs API</a>
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="users.html" class="nav-tab active">🔑 Clés API</a>
+      <a href="settings.html" class="nav-tab">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab">📡 Docs API</a>
     </div>
 
     <div class="user-nav" id="userNav">
@@ -40,16 +41,18 @@
         <table class="table">
           <thead>
             <tr>
+              <th>ID Utilisateur</th>
+              <th>Nom & Prénom</th>
               <th>E-mail</th>
               <th>Rôle</th>
-              <th>Clés API Actives</th>
+              <th>Clés API</th>
               <th>Date de création</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="usersTableBody">
             <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-dim);">Chargement des utilisateurs...</td>
+              <td colspan="7" style="text-align: center; color: var(--text-dim);">Chargement des utilisateurs...</td>
             </tr>
           </tbody>
         </table>
@@ -94,13 +97,23 @@
         <button class="close-btn" onclick="closeModal('createUserModal')">&times;</button>
       </div>
       <form onsubmit="handleCreateUserAdmin(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="newFirstName">Prénom</label>
+            <input type="text" id="newFirstName" class="form-control" placeholder="Jean">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newLastName">Nom</label>
+            <input type="text" id="newLastName" class="form-control" placeholder="Dupont">
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="newEmail">Adresse E-mail</label>
-          <input type="email" id="newEmail" class="form-control" required>
+          <input type="email" id="newEmail" class="form-control" required placeholder="user@eoxia.com">
         </div>
         <div class="form-group">
           <label class="form-label" for="newPassword">Mot de passe</label>
-          <input type="password" id="newPassword" class="form-control" required>
+          <input type="password" id="newPassword" class="form-control" required placeholder="••••••••">
         </div>
         <div class="form-group">
           <label class="form-label" for="newRole">Rôle du compte</label>

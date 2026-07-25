@@ -1,12 +1,17 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { getCsrfToken, verifyCsrfToken } from '../middleware/csrf.js';
+import { enforceIpFilter } from '../middleware/ipFilter.js';
 import { register, login, getMe } from '../controllers/authController.js';
 import { createToken, listTokens, revokeToken } from '../controllers/tokenController.js';
 import { createScan, getScan, listScans } from '../controllers/scanController.js';
 import { requireAdmin, listUsers, createUser, createTokenForUser, deleteUser } from '../controllers/userController.js';
+import { getSettings, updateSettings, getLoginLogs } from '../controllers/settingsController.js';
 
 const router = express.Router();
+
+// Enforce IP Whitelist / Blacklist filtering
+router.use(enforceIpFilter);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -34,11 +39,18 @@ router.post('/tokens', authenticateToken, createToken);
 router.get('/tokens', authenticateToken, listTokens);
 router.delete('/tokens/:id', authenticateToken, revokeToken);
 
-// Admin User Management Routes
+// Settings Routes
+router.get('/settings', authenticateToken, getSettings);
+router.put('/settings', authenticateToken, requireAdmin, updateSettings);
+
+// Admin User & Security Management Routes
 router.get('/admin/users', authenticateToken, requireAdmin, listUsers);
 router.post('/admin/users', authenticateToken, requireAdmin, createUser);
 router.post('/admin/users/:userId/tokens', authenticateToken, requireAdmin, createTokenForUser);
 router.delete('/admin/users/:id', authenticateToken, requireAdmin, deleteUser);
+
+// Admin Security Audit Trail Logs (IP, ID, Nom, Prénom, Email)
+router.get('/admin/login-logs', authenticateToken, requireAdmin, getLoginLogs);
 
 // Scan Routes
 router.post('/scans', authenticateToken, createScan);

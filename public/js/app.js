@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Discreet Toast Notification System (replaces native alert popups)
+ * Discreet Toast Notification System
  */
 function ensureToastContainer() {
   if (!document.getElementById('toastContainer')) {
@@ -47,7 +47,6 @@ function showToast(message, type = 'info', duration = 4000) {
 
   container.appendChild(toast);
 
-  // Auto remove toast after duration
   setTimeout(() => {
     if (toast.parentElement) {
       toast.style.animation = 'toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards';
@@ -90,9 +89,13 @@ function renderUserNavbar() {
   if (currentUser) {
     if (navTabs) navTabs.style.display = 'flex';
     if (userNav) {
+      const displayName = (currentUser.first_name || currentUser.last_name)
+        ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
+        : currentUser.email;
+
       userNav.innerHTML = `
         <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
-        <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(currentUser.email)}</span>
+        <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
       `;
     }
@@ -111,6 +114,40 @@ function renderUserNavbar() {
       userNav.innerHTML = `<a href="login.html" class="btn btn-primary btn-sm">Se connecter</a>`;
     }
   }
+}
+
+/**
+ * Switch Settings Page Sub-Tabs
+ */
+function switchSettingsTab(tabId) {
+  const tabs = ['settingsUsersTab', 'settingsScanTab', 'settingsSecurityTab'];
+  tabs.forEach(t => {
+    const el = document.getElementById(t);
+    if (el) el.style.display = (t === tabId) ? 'block' : 'none';
+  });
+
+  const btnMap = {
+    'settingsUsersTab': 'btnTabUsers',
+    'settingsScanTab': 'btnTabScanParams',
+    'settingsSecurityTab': 'btnTabSecurity'
+  };
+
+  Object.entries(btnMap).forEach(([t, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      if (t === tabId) {
+        btn.classList.add('btn-primary');
+        btn.classList.remove('btn-secondary');
+      } else {
+        btn.classList.add('btn-secondary');
+        btn.classList.remove('btn-primary');
+      }
+    }
+  });
+
+  if (tabId === 'settingsUsersTab') loadAdminUsers();
+  if (tabId === 'settingsScanTab' || tabId === 'settingsSecurityTab') loadSettings();
+  if (tabId === 'settingsSecurityTab') loadLoginLogs();
 }
 
 /**
@@ -245,7 +282,7 @@ async function loadScans() {
 }
 
 /**
- * Handle Create Scan Submission (Displays discreet toast notification with formatted ID)
+ * Handle Create Scan Submission
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -348,6 +385,153 @@ async function viewScanDetails(scanId) {
 }
 
 /**
+ * Load System & Security Settings
+ */
+async function loadSettings() {
+  try {
+    const apiUrl = getApiUrl('/api/v1/settings');
+    const res = await fetch(apiUrl, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    const s = data.settings || {};
+
+    const timeoutInput = document.getElementById('settingTimeout');
+    if (timeoutInput && s.scanner_default_timeout) timeoutInput.value = s.scanner_default_timeout;
+
+    const numPagesInput = document.getElementById('settingNumPages');
+    if (numPagesInput && s.scanner_default_num_pages) numPagesInput.value = s.scanner_default_num_pages;
+
+    const maxConcurrentInput = document.getElementById('settingMaxConcurrent');
+    if (maxConcurrentInput && s.scanner_max_concurrent) maxConcurrentInput.value = s.scanner_max_concurrent;
+
+    const headlessCheckbox = document.getElementById('settingHeadless');
+    if (headlessCheckbox) headlessCheckbox.checked = s.scanner_default_headless !== false;
+
+    const whitelistText = document.getElementById('ipWhitelistText');
+    if (whitelistText && Array.isArray(s.ip_whitelist)) whitelistText.value = s.ip_whitelist.join('\n');
+
+    const blacklistText = document.getElementById('ipBlacklistText');
+    if (blacklistText && Array.isArray(s.ip_blacklist)) blacklistText.value = s.ip_blacklist.join('\n');
+  } catch (err) {
+    console.warn('Load settings notice:', err.message);
+  }
+}
+
+/**
+ * Save Scan Settings
+ */
+async function handleSaveScanSettings(event) {
+  event.preventDefault();
+  const timeout = parseInt(document.getElementById('settingTimeout').value, 10);
+  const numPages = parseInt(document.getElementById('settingNumPages').value, 10);
+  const maxConcurrent = parseInt(document.getElementById('settingMaxConcurrent').value, 10);
+  const headless = document.getElementById('settingHeadless').checked;
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        settings: {
+          scanner_default_timeout: timeout,
+          scanner_default_num_pages: numPages,
+          scanner_max_concurrent: maxConcurrent,
+          scanner_default_headless: headless
+        }
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Paramètres de scan enregistrés avec succès', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Save IP Whitelist & Blacklist
+ */
+async function handleSaveIpSettings() {
+  const whitelistRaw = document.getElementById('ipWhitelistText').value;
+  const blacklistRaw = document.getElementById('ipBlacklistText').value;
+
+  const whitelist = whitelistRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const blacklist = blacklistRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        settings: {
+          ip_whitelist: whitelist,
+          ip_blacklist: blacklist
+        }
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast("Listes de filtrage d'IP enregistrées avec succès", 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Load Login Audit Trail Logs (IP, ID, Nom, Prénom, Email, Statut)
+ */
+async function loadLoginLogs() {
+  const tbody = document.getElementById('loginLogsTableBody');
+  if (!tbody) return;
+
+  try {
+    const apiUrl = getApiUrl('/api/v1/admin/login-logs');
+    const res = await fetch(apiUrl, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+
+    if (!data.logs || data.logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-dim);">Aucun log de connexion enregistré.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.logs.map(log => {
+      const fullName = (log.first_name || log.last_name)
+        ? `${log.first_name} ${log.last_name}`.trim()
+        : '-';
+      const statusBadge = log.status === 'success'
+        ? `<span class="status-badge completed">SUCCÈS</span>`
+        : `<span class="status-badge failed">ÉCHEC</span>`;
+
+      return `
+        <tr>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">${formatDate(log.created_at)}</td>
+          <td><code style="color: var(--accent-cyan);">${escapeHtml(log.ip_address)}</code></td>
+          <td style="font-size: 0.8rem; font-family: monospace; color: var(--text-dim);">${log.user_id ? escapeHtml(log.user_id.substring(0, 8)) + '...' : '-'}</td>
+          <td style="font-weight: 500;">${escapeHtml(fullName)}</td>
+          <td>${escapeHtml(log.email)}</td>
+          <td>${statusBadge}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+/**
  * Load API Tokens List
  */
 async function loadTokens() {
@@ -404,10 +588,10 @@ async function revokeToken(tokenId) {
 }
 
 /**
- * Load Admin Users
+ * Load Admin Users (With Nom & Prénom rendering)
  */
 async function loadAdminUsers() {
-  const tbody = document.getElementById('usersTableBody');
+  const tbody = document.getElementById('usersTableBody') || document.getElementById('settingsUsersTableBody');
   if (!tbody) return;
 
   try {
@@ -419,18 +603,26 @@ async function loadAdminUsers() {
 
     if (!data.users) return;
 
-    tbody.innerHTML = data.users.map(u => `
-      <tr>
-        <td style="font-weight: 600;">${escapeHtml(u.email)}</td>
-        <td><span class="role-pill ${u.role}">${u.role.toUpperCase()}</span></td>
-        <td>${u.token_count} clé(s)</td>
-        <td style="color: var(--text-muted); font-size: 0.85rem;">${formatDate(u.created_at)}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="openAllocateTokenModal('${u.id}', '${escapeHtml(u.email)}')">🔑 Clé API</button>
-          ${u.id !== currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Supprimer</button>` : ''}
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = data.users.map(u => {
+      const fullName = (u.first_name || u.last_name)
+        ? `${u.first_name} ${u.last_name}`.trim()
+        : '-';
+
+      return `
+        <tr>
+          <td style="font-size: 0.8rem; font-family: monospace; color: var(--text-dim);">${escapeHtml(u.id)}</td>
+          <td style="font-weight: 600;">${escapeHtml(fullName)}</td>
+          <td>${escapeHtml(u.email)}</td>
+          <td><span class="role-pill ${u.role}">${u.role.toUpperCase()}</span></td>
+          <td>${u.token_count} clé(s)</td>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">${formatDate(u.created_at)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="openAllocateTokenModal('${u.id}', '${escapeHtml(u.email)}')">🔑 Clé API</button>
+            ${u.id !== currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Supprimer</button>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
   } catch (err) {
     console.error('Error loading admin users:', err);
   }
@@ -511,13 +703,15 @@ function copyRawToken() {
 }
 
 /**
- * Admin: Handle Create User / Admin Submit
+ * Admin: Handle Create User / Admin Submit (With Nom and Prénom)
  */
 async function handleCreateUserAdmin(event) {
   event.preventDefault();
   const email = document.getElementById('newEmail').value;
   const password = document.getElementById('newPassword').value;
   const role = document.getElementById('newRole').value;
+  const firstName = document.getElementById('newFirstName') ? document.getElementById('newFirstName').value : '';
+  const lastName = document.getElementById('newLastName') ? document.getElementById('newLastName').value : '';
 
   try {
     const res = await secureFetch('/api/v1/admin/users', {
@@ -526,7 +720,7 @@ async function handleCreateUserAdmin(event) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
       },
-      body: JSON.stringify({ email, password, role })
+      body: JSON.stringify({ email, password, role, first_name: firstName, last_name: lastName })
     });
 
     const data = await parseJsonResponse(res);

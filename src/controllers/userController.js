@@ -14,13 +14,13 @@ export function requireAdmin(req, res, next) {
 }
 
 /**
- * Admin: List all users
+ * Admin: List all users with Nom, Prénom, Email, Role
  */
 export function listUsers(req, res) {
   try {
     const users = db
       .prepare(
-        `SELECT users.id, users.email, users.role, users.created_at, 
+        `SELECT users.id, users.email, users.first_name, users.last_name, users.role, users.created_at, 
                 COUNT(api_tokens.id) as token_count
          FROM users 
          LEFT JOIN api_tokens ON api_tokens.user_id = users.id 
@@ -37,11 +37,11 @@ export function listUsers(req, res) {
 }
 
 /**
- * Admin: Create a new user or admin account
+ * Admin: Create a new user or admin account with Nom and Prénom
  */
 export async function createUser(req, res) {
   try {
-    const { email, password, role = 'user' } = req.body;
+    const { email, password, first_name = '', last_name = '', role = 'user' } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Bad Request', message: 'Email and password are required' });
@@ -56,16 +56,18 @@ export async function createUser(req, res) {
     const userId = uuidv4();
     const validRole = role === 'admin' ? 'admin' : 'user';
 
-    db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?)').run(
       userId,
       email,
       passwordHash,
-      validRole
+      validRole,
+      first_name,
+      last_name
     );
 
     return res.status(201).json({
       message: `Account (${validRole}) created successfully`,
-      user: { id: userId, email, role: validRole }
+      user: { id: userId, email, first_name, last_name, role: validRole }
     });
   } catch (error) {
     console.error('[User Controller] Create user error:', error);
@@ -85,7 +87,7 @@ export function createTokenForUser(req, res) {
       return res.status(400).json({ error: 'Bad Request', message: 'API Key name is required' });
     }
 
-    const targetUser = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
+    const targetUser = db.prepare('SELECT id, email, first_name, last_name FROM users WHERE id = ?').get(userId);
     if (!targetUser) {
       return res.status(404).json({ error: 'Not Found', message: 'Target user not found' });
     }
