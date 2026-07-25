@@ -39,7 +39,7 @@
       <form onsubmit="handleCreateScan(event)">
         <div class="form-group">
           <label class="form-label" for="scanUrl">URL Cible à Scanner</label>
-          <input type="url" id="scanUrl" class="form-control" placeholder="https://eoxia.com" required>
+          <input type="url" id="scanUrl" class="form-control" placeholder="https://www.evarisk.com/" required>
         </div>
 
         <div class="form-row">
@@ -64,33 +64,40 @@
           <label class="checkbox-group">
             <input type="checkbox" id="scanTrackers" checked> Détecter les Traqueurs & Analytics
           </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="scanScreenshots" checked> 📸 Capturer des images de chaque page
+          </label>
         </div>
 
         <button type="submit" class="btn btn-primary">⚡ Démarrer l'Analyse</button>
       </form>
     </div>
 
-    <!-- Scans History List -->
+    <!-- Scans History List (Matching User Annotations) -->
     <div class="card">
       <div class="card-title" style="justify-content: space-between;">
         <span>📋 Historique des Scans</span>
-        <button class="btn btn-secondary btn-sm" onclick="loadScans()">🔄 Actualiser</button>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span id="livePollingBadge" style="font-size: 0.8rem; color: var(--accent-cyan); display: none;">🔄 Actualisation en direct...</span>
+          <button class="btn btn-secondary btn-sm" onclick="loadScans()">🔄 Actualiser</button>
+        </div>
       </div>
 
       <div class="table-responsive">
         <table class="table">
           <thead>
             <tr>
-              <th>Statut</th>
+              <th>Statut & Progression</th>
               <th>URL Cible</th>
-              <th>Date de Création</th>
-              <th>Durée / Fin</th>
-              <th>Actions</th>
+              <th>Date de Début</th>
+              <th>Date de Fin</th>
+              <th>Durée</th>
+              <th>Actions / Scan Détaillé</th>
             </tr>
           </thead>
           <tbody id="scansTableBody">
             <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-dim);">Chargement des scans...</td>
+              <td colspan="6" style="text-align: center; color: var(--text-dim);">Chargement des scans...</td>
             </tr>
           </tbody>
         </table>
@@ -101,9 +108,9 @@
 
   <!-- MODAL: Scan Result Details Inspector -->
   <div id="scanResultModal" class="modal-backdrop">
-    <div class="modal" style="max-width: 800px;">
+    <div class="modal" style="max-width: 850px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="scanModalTitle">Détails du Scan</h3>
+        <h3 class="modal-title" id="scanModalTitle">Rapport & Inspection du Scan</h3>
         <button class="close-btn" onclick="closeModal('scanResultModal')">&times;</button>
       </div>
       <div id="scanModalContent">

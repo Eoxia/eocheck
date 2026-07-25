@@ -3,7 +3,7 @@ import { runScanJob } from '../services/scannerService.js';
 
 /**
  * Generate formatted custom scan ID: url-AAAMMJJHHMMSS-0001
- * Example: www.eoxia.com-20260725234918-0001
+ * Example: www.eoxia.com-20260725235008-0001
  */
 export function generateFormattedScanId(targetUrl) {
   let urlSlug = 'url';
@@ -24,7 +24,6 @@ export function generateFormattedScanId(targetUrl) {
 
   const timestamp = `${YYYY}${MM}${DD}${HH}${mm}${SS}`;
 
-  // Get total scan count + 1 for 4-digit sequence (0001, 0002, ...)
   const countRow = db.prepare('SELECT COUNT(*) as total FROM scans').get();
   const sequenceNum = String((countRow ? countRow.total : 0) + 1).padStart(4, '0');
 
@@ -42,7 +41,6 @@ export function createScan(req, res) {
       return res.status(400).json({ error: 'Bad Request', message: 'Target URL is required' });
     }
 
-    // Validate URL format
     try {
       new URL(url);
     } catch (e) {
@@ -53,9 +51,9 @@ export function createScan(req, res) {
     const userId = req.user ? req.user.id : null;
 
     db.prepare(
-      `INSERT INTO scans (id, user_id, target_url, status, options_json) 
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(scanId, userId, url, 'pending', JSON.stringify(options));
+      `INSERT INTO scans (id, user_id, target_url, status, options_json, progress_percent, progress_step) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(scanId, userId, url, 'pending', JSON.stringify(options), 5, 'Demande de scan reçue...');
 
     // Trigger scan asynchronously in background
     runScanJob(scanId, url, options).catch((err) => {
@@ -67,6 +65,8 @@ export function createScan(req, res) {
       scan_id: scanId,
       target_url: url,
       status: 'pending',
+      progress_percent: 5,
+      progress_step: 'Demande de scan reçue...',
       status_url: `/api/v1/scans/${scanId}`
     });
   } catch (error) {
@@ -92,6 +92,8 @@ export function getScan(req, res) {
       id: scan.id,
       target_url: scan.target_url,
       status: scan.status,
+      progress_percent: scan.progress_percent || 0,
+      progress_step: scan.progress_step || '',
       options: scan.options_json ? JSON.parse(scan.options_json) : {},
       result: scan.result_json ? JSON.parse(scan.result_json) : null,
       error_message: scan.error_message,
@@ -114,11 +116,11 @@ export function listScans(req, res) {
 
     if (userId) {
       scans = db
-        .prepare('SELECT id, target_url, status, created_at, completed_at FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
+        .prepare('SELECT id, target_url, status, progress_percent, progress_step, created_at, completed_at FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
         .all(userId);
     } else {
       scans = db
-        .prepare('SELECT id, target_url, status, created_at, completed_at FROM scans ORDER BY created_at DESC LIMIT 20')
+        .prepare('SELECT id, target_url, status, progress_percent, progress_step, created_at, completed_at FROM scans ORDER BY created_at DESC LIMIT 20')
         .all();
     }
 

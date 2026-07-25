@@ -11,6 +11,15 @@ export function up(db) {
     db.exec(`ALTER TABLE users ADD COLUMN last_name TEXT DEFAULT '';`);
   }
 
+  // Add progress_percent and progress_step columns to scans table if missing
+  const scanColumns = db.prepare("PRAGMA table_info(scans)").all().map(c => c.name);
+  if (!scanColumns.includes('progress_percent')) {
+    db.exec(`ALTER TABLE scans ADD COLUMN progress_percent INTEGER DEFAULT 0;`);
+  }
+  if (!scanColumns.includes('progress_step')) {
+    db.exec(`ALTER TABLE scans ADD COLUMN progress_step TEXT DEFAULT '';`);
+  }
+
   // Create settings table
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (

@@ -1,6 +1,7 @@
 let currentUser = null;
 let authToken = localStorage.getItem('eocheck_token') || null;
 let currentRawTokenToCopy = '';
+let scanPollingTimer = null;
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
@@ -246,10 +247,26 @@ function logout() {
 }
 
 /**
- * Load & Render Scans List
+ * Calculate human-readable duration between start and end dates
+ */
+function formatDuration(startIso, endIso) {
+  if (!startIso || !endIso) return 'En cours...';
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  const diffSec = Math.max(0, Math.round((end - start) / 1000));
+
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+}
+
+/**
+ * Load & Render Scans List (With Interactive Live Progress Bar & Date/Duration Columns)
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
+  const pollingBadge = document.getElementById('livePollingBadge');
   if (!tbody) return;
 
   try {
@@ -261,28 +278,59 @@ async function loadScans() {
     const data = await parseJsonResponse(res);
 
     if (!data.scans || data.scans.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-dim);">Aucun scan enregistré.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-dim);">Aucun scan enregistré.</td></tr>`;
+      if (pollingBadge) pollingBadge.style.display = 'none';
       return;
     }
 
-    tbody.innerHTML = data.scans.map(scan => `
-      <tr>
-        <td><span class="status-badge ${scan.status}">${scan.status.toUpperCase()}</span></td>
-        <td style="font-weight: 500; word-break: break-all;">${escapeHtml(scan.target_url)}</td>
-        <td style="color: var(--text-muted); font-size: 0.85rem;">${formatDate(scan.created_at)}</td>
-        <td style="color: var(--text-muted); font-size: 0.85rem;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Inspecter</button>
-        </td>
-      </tr>
-    `).join('');
+    let hasActiveScans = false;
+
+    tbody.innerHTML = data.scans.map(scan => {
+      const isProcessing = scan.status === 'processing' || scan.status === 'pending';
+      if (isProcessing) hasActiveScans = true;
+
+      const pct = Math.min(100, Math.max(0, scan.progress_percent || (scan.status === 'completed' ? 100 : (scan.status === 'pending' ? 10 : 50))));
+      const stepText = scan.progress_step || (isProcessing ? 'Analyse en cours...' : scan.status.toUpperCase());
+
+      // Render interactive progress bar if active, or status badge if finished
+      const statusCell = isProcessing
+        ? `<div class="progress-track" title="${escapeHtml(stepText)}">
+             <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+             <span class="progress-bar-text">${pct}% - ${escapeHtml(stepText)}</span>
+           </div>`
+        : `<span class="status-badge ${scan.status}">${scan.status.toUpperCase()}</span>`;
+
+      return `
+        <tr>
+          <td>${statusCell}</td>
+          <td style="font-weight: 500; word-break: break-all;">${escapeHtml(scan.target_url)}</td>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">${formatDate(scan.created_at)}</td>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</td>
+          <td style="font-weight: 600; color: var(--accent-cyan); font-size: 0.85rem;">${formatDuration(scan.created_at, scan.completed_at)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Auto-polling for active processing scans every 2 seconds
+    if (hasActiveScans) {
+      if (pollingBadge) pollingBadge.style.display = 'inline';
+      if (scanPollingTimer) clearTimeout(scanPollingTimer);
+      scanPollingTimer = setTimeout(loadScans, 2000);
+    } else {
+      if (pollingBadge) pollingBadge.style.display = 'none';
+      if (scanPollingTimer) clearTimeout(scanPollingTimer);
+    }
+
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
 /**
- * Handle Create Scan Submission
+ * Handle Create Scan Submission (With Screenshots Option)
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -292,6 +340,7 @@ async function handleCreateScan(event) {
   const headless = document.getElementById('scanHeadless').checked;
   const inspectCookies = document.getElementById('scanCookies').checked;
   const inspectTrackers = document.getElementById('scanTrackers').checked;
+  const takeScreenshots = document.getElementById('scanScreenshots') ? document.getElementById('scanScreenshots').checked : true;
 
   try {
     const res = await secureFetch('/api/v1/scans', {
@@ -302,7 +351,7 @@ async function handleCreateScan(event) {
       },
       body: JSON.stringify({
         url,
-        options: { numPages, timeout, headless, inspectCookies, inspectTrackers }
+        options: { numPages, timeout, headless, inspectCookies, inspectTrackers, takeScreenshots }
       })
     });
 
@@ -317,7 +366,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal
+ * View Detailed Scan Result Modal (With Screenshots Gallery & Scanned URLs List)
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
@@ -333,16 +382,18 @@ async function viewScanDetails(scanId) {
 
     const result = scan.result || {};
     const privacy = result.privacy_inspection || {};
+    const scannedUrls = result.scanned_urls || [scan.target_url];
+    const screenshots = result.screenshots || [];
 
     modalContent.innerHTML = `
-      <div style="margin-bottom: 1rem;">
+      <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
         <div style="font-size: 0.85rem; color: var(--text-muted);">ID du Scan :</div>
         <div style="font-size: 1rem; font-weight: 700; color: var(--accent-emerald); font-family: monospace;">${escapeHtml(scan.id)}</div>
       </div>
 
-      <div style="margin-bottom: 1rem;">
+      <div style="margin-bottom: 1.25rem;">
         <div style="font-size: 0.85rem; color: var(--text-muted);">URL Cible :</div>
-        <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan); word-break: break-all;">${escapeHtml(scan.target_url)}</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--accent-cyan); word-break: break-all;">${escapeHtml(scan.target_url)}</div>
       </div>
 
       <div class="form-row" style="margin-bottom: 1.25rem;">
@@ -351,12 +402,38 @@ async function viewScanDetails(scanId) {
           <span class="status-badge ${scan.status}">${scan.status.toUpperCase()}</span>
         </div>
         <div>
-          <span class="form-label">Traqueurs Détectés</span>
-          <span style="font-weight: 700; color: ${privacy.trackers_count > 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)'}">
-            ${privacy.trackers_count || 0} traqueur(s)
-          </span>
+          <span class="form-label">Date Début / Fin</span>
+          <span style="font-size: 0.85rem; color: #fff;">${formatDate(scan.created_at)} ➔ ${scan.completed_at ? formatDate(scan.completed_at) : 'En cours'}</span>
+        </div>
+        <div>
+          <span class="form-label">Durée d'Analyse</span>
+          <span style="font-weight: 700; color: var(--accent-cyan);">${formatDuration(scan.created_at, scan.completed_at)}</span>
         </div>
       </div>
+
+      <!-- Scanned URLs List Section -->
+      <div style="margin-bottom: 1.5rem; background: rgba(0, 0, 0, 0.3); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        <h4 style="font-size: 0.95rem; color: var(--accent-cyan); margin-bottom: 0.5rem;">🔗 Liste des URLs Explorées & Scannées (${scannedUrls.length}) :</h4>
+        <ul style="padding-left: 1.2rem; color: var(--text-main); font-size: 0.88rem; word-break: break-all;">
+          ${scannedUrls.map(u => `<li><a href="${escapeHtml(u)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(u)}</a></li>`).join('')}
+        </ul>
+      </div>
+
+      <!-- Page Screenshots Gallery Section -->
+      ${screenshots && screenshots.length > 0 ? `
+        <div style="margin-bottom: 1.5rem;">
+          <h4 style="font-size: 0.95rem; color: var(--accent-emerald); margin-bottom: 0.5rem;">📸 Captures d'Écran des Pages Scannées (${screenshots.length}) :</h4>
+          <div class="screenshot-grid">
+            ${screenshots.map(s => `
+              <div class="screenshot-card">
+                <div style="font-size: 0.82rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
+                <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">${escapeHtml(s.url)}</div>
+                <img src="${s.preview}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
       ${privacy.trackers_detected && privacy.trackers_detected.length > 0 ? `
         <div style="margin-bottom: 1rem;">
@@ -376,7 +453,7 @@ async function viewScanDetails(scanId) {
         </div>
       ` : ''}
 
-      <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Fichier / Payload JSON Complet du Scan :</h4>
+      <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Payload JSON Complet du Scan :</h4>
       <pre class="json-viewer">${escapeHtml(JSON.stringify(scan, null, 2))}</pre>
     `;
   } catch (err) {
@@ -703,7 +780,7 @@ function copyRawToken() {
 }
 
 /**
- * Handle Create User / Admin Account (Works with both Admin and Public registration)
+ * Handle Create User / Admin Account
  */
 async function handleCreateUserAdmin(event) {
   event.preventDefault();
@@ -733,7 +810,6 @@ async function handleCreateUserAdmin(event) {
       body: JSON.stringify({ email, password, role, first_name: firstName, last_name: lastName })
     });
 
-    // Fallback to public registration endpoint if admin endpoint returns unauthorized/forbidden
     if ((res.status === 401 || res.status === 403) && endpoint !== '/api/v1/auth/register') {
       res = await secureFetch('/api/v1/auth/register', {
         method: 'POST',
@@ -748,7 +824,6 @@ async function handleCreateUserAdmin(event) {
     showToast(`Compte pour ${email} créé avec succès (${data.user.role}) !`, 'success');
     closeModal('createUserModal');
 
-    // Reset inputs
     if (document.getElementById('newEmail')) document.getElementById('newEmail').value = '';
     if (document.getElementById('newPassword')) document.getElementById('newPassword').value = '';
     if (document.getElementById('newFirstName')) document.getElementById('newFirstName').value = '';
