@@ -4,12 +4,57 @@ let currentRawTokenToCopy = '';
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
+  ensureToastContainer();
   if (authToken) {
     fetchProfile();
   } else {
     renderUserNavbar();
   }
 });
+
+/**
+ * Discreet Toast Notification System (replaces native alert popups)
+ */
+function ensureToastContainer() {
+  if (!document.getElementById('toastContainer')) {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+}
+
+function showToast(message, type = 'info', duration = 4000) {
+  ensureToastContainer();
+  const container = document.getElementById('toastContainer');
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  const iconMap = {
+    success: '✅',
+    error: '❌',
+    info: 'ℹ️'
+  };
+
+  toast.innerHTML = `
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <span>${iconMap[type] || 'ℹ️'}</span>
+      <span>${escapeHtml(message)}</span>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+  `;
+
+  container.appendChild(toast);
+
+  // Auto remove toast after duration
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.animation = 'toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, duration);
+}
 
 /**
  * Fetch current logged-in user profile
@@ -113,10 +158,11 @@ async function handleLogin(event) {
     localStorage.setItem('eocheck_token', authToken);
     currentUser = data.user;
 
+    showToast('Connexion réussie !', 'success');
     renderUserNavbar();
-    window.location.href = 'scans.html';
+    setTimeout(() => { window.location.href = 'scans.html'; }, 500);
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -138,15 +184,15 @@ async function handleRegister(event) {
     const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || "Erreur lors de l'inscription");
 
-    alert(`Compte créé avec succès ! (${data.user.role})`);
+    showToast(`Compte créé avec succès ! (${data.user.role})`, 'success');
     authToken = data.token;
     localStorage.setItem('eocheck_token', authToken);
     currentUser = data.user;
 
     renderUserNavbar();
-    window.location.href = 'scans.html';
+    setTimeout(() => { window.location.href = 'scans.html'; }, 500);
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -157,8 +203,9 @@ function logout() {
   authToken = null;
   currentUser = null;
   localStorage.removeItem('eocheck_token');
+  showToast('Déconnexion effectuée', 'info');
   renderUserNavbar();
-  window.location.href = 'login.html';
+  setTimeout(() => { window.location.href = 'login.html'; }, 300);
 }
 
 /**
@@ -198,7 +245,7 @@ async function loadScans() {
 }
 
 /**
- * Handle Create Scan Submission
+ * Handle Create Scan Submission (Replaces alert popup with discreet toast)
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -225,10 +272,10 @@ async function handleCreateScan(event) {
     const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors du lancement du scan');
 
-    alert(`Scan lancé avec succès ! (ID: ${data.scan_id})`);
+    showToast(`Scan lancé avec succès ! (ID: ${data.scan_id.substring(0, 8)}...)`, 'success');
     loadScans();
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -344,9 +391,10 @@ async function revokeToken(tokenId) {
     });
 
     if (!res.ok) throw new Error('Échec de la révocation');
+    showToast('Clé API révoquée avec succès', 'info');
     loadTokens();
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -396,9 +444,10 @@ async function deleteUser(userId) {
     });
 
     if (!res.ok) throw new Error('Échec de la suppression');
+    showToast('Utilisateur supprimé', 'info');
     loadAdminUsers();
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -438,10 +487,11 @@ async function handleCreateToken(event) {
     document.getElementById('rawTokenDisplay').textContent = data.api_token;
     openModal('showKeyModal');
 
+    showToast('Clé API générée avec succès', 'success');
     loadTokens();
     if (currentUser && currentUser.role === 'admin') loadAdminUsers();
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
@@ -451,7 +501,7 @@ async function handleCreateToken(event) {
 function copyRawToken() {
   if (currentRawTokenToCopy) {
     navigator.clipboard.writeText(currentRawTokenToCopy);
-    alert('Clé API copiée dans le presse-papier !');
+    showToast('Clé API copiée dans le presse-papier !', 'success');
   }
 }
 
@@ -477,11 +527,11 @@ async function handleCreateUserAdmin(event) {
     const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors de la création');
 
-    alert(`Compte créé avec succès (${data.user.role}) !`);
+    showToast(`Compte créé avec succès (${data.user.role}) !`, 'success');
     closeModal('createUserModal');
     loadAdminUsers();
   } catch (err) {
-    alert(`Erreur : ${err.message}`);
+    showToast(err.message, 'error');
   }
 }
 
