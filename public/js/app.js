@@ -262,7 +262,41 @@ function formatDuration(startIso, endIso) {
 }
 
 /**
- * Load & Render Scans List (With Interactive Live Progress Bar & Date/Duration Columns)
+ * Re-launch a scan for a target URL
+ */
+async function rescanTarget(targetUrl) {
+  try {
+    const numPages = parseInt(document.getElementById('scanPages')?.value || 0, 10);
+    const timeout = parseInt(document.getElementById('scanTimeout')?.value || 60, 10);
+    const headless = document.getElementById('scanHeadless')?.checked !== false;
+    const inspectCookies = document.getElementById('scanCookies')?.checked !== false;
+    const inspectTrackers = document.getElementById('scanTrackers')?.checked !== false;
+    const takeScreenshots = document.getElementById('scanScreenshots')?.checked !== false;
+
+    const res = await secureFetch('/api/v1/scans', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        options: { numPages, timeout, headless, inspectCookies, inspectTrackers, takeScreenshots }
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors du relancement du scan');
+
+    showToast(`Scan relancé avec succès ! ID: ${data.scan_id}`, 'success', 5000);
+    loadScans();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Load & Render Scans List
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
@@ -292,7 +326,6 @@ async function loadScans() {
       const pct = Math.min(100, Math.max(0, scan.progress_percent || (scan.status === 'completed' ? 100 : (scan.status === 'pending' ? 10 : 50))));
       const stepText = scan.progress_step || (isProcessing ? 'Analyse en cours...' : scan.status.toUpperCase());
 
-      // Render interactive progress bar if active, or status badge if finished
       const statusCell = isProcessing
         ? `<div class="progress-track" title="${escapeHtml(stepText)}">
              <div class="progress-bar-fill" style="width: ${pct}%;"></div>
@@ -308,7 +341,10 @@ async function loadScans() {
           <td style="color: var(--text-muted); font-size: 0.85rem;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</td>
           <td style="font-weight: 600; color: var(--accent-cyan); font-size: 0.85rem;">${formatDuration(scan.created_at, scan.completed_at)}</td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
+              <button class="btn btn-primary btn-sm" onclick="rescanTarget('${escapeHtml(scan.target_url)}')">🔄 Relancer</button>
+            </div>
           </td>
         </tr>
       `;
@@ -330,7 +366,7 @@ async function loadScans() {
 }
 
 /**
- * Handle Create Scan Submission (With Screenshots Option)
+ * Handle Create Scan Submission
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -366,7 +402,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal (With Screenshots Gallery & Scanned URLs List)
+ * View Detailed Scan Result Modal
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
