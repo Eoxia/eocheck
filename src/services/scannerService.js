@@ -48,6 +48,36 @@ function findChromeExecutable() {
 }
 
 /**
+ * Generate human-readable filename slug for screenshot image
+ * Example: https://www.evarisk.com/ -> accueil.jpg
+ * Example: https://www.evarisk.com/a-propos -> a-propos.jpg
+ * Example: https://www.evarisk.com/politique-de-confidentialite -> politique-de-confidentialite.jpg
+ */
+function getUrlFilenameSlug(pageUrl, pageIndex) {
+  try {
+    const u = new URL(pageUrl);
+    let pathname = u.pathname.trim();
+
+    // Strip leading and trailing slashes
+    pathname = pathname.replace(/^\/+|\/+$/g, '');
+
+    if (!pathname || pathname === '') {
+      return 'accueil.jpg';
+    }
+
+    // Convert pathname slug to safe filename (e.g., politique-de-confidentialite)
+    const slug = pathname
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-');
+
+    return slug ? `${slug}.jpg` : `page_${pageIndex + 1}.jpg`;
+  } catch (e) {
+    return pageIndex === 0 ? 'accueil.jpg' : `page_${pageIndex + 1}.jpg`;
+  }
+}
+
+/**
  * Capture real website page screenshot with Puppeteer and save as physical JPEG file in outputs/screenshots/SCAN_ID/
  */
 async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadless = true, timeoutMs = 30000) {
@@ -77,7 +107,7 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
       fs.mkdirSync(scanOutputDir, { recursive: true });
     }
 
-    const imageFilename = `page_${pageIndex + 1}.jpg`;
+    const imageFilename = getUrlFilenameSlug(pageUrl, pageIndex);
     const imageFilePath = path.join(scanOutputDir, imageFilename);
 
     // Save physical JPEG image file to disk
@@ -221,7 +251,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           const pageUrl = scannedUrls[idx];
           const pageTitle = idx === 0 ? "Page d'accueil (Accueil)" : `Page secondaire #${idx} (${new URL(pageUrl).pathname})`;
 
-          // Save physical JPEG image file into outputs/screenshots/SCAN_ID/
+          // Save physical JPEG image file into outputs/screenshots/SCAN_ID/ with human-readable page name
           const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs);
 
           screenshots.push({
