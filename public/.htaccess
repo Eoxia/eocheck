@@ -1,0 +1,12 @@
+# Enable Apache Proxy to Node.js backend if mod_proxy is enabled in WampServer
+<IfModule mod_proxy.c>
+    ProxyPass /api/v1/ http://localhost:3000/api/v1/
+    ProxyPassReverse /api/v1/ http://localhost:3000/api/v1/
+</IfModule>
+
+# Set correct CORS & HTML headers
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE, PUT"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Token, X-CSRF-Token"
+</IfModule>
