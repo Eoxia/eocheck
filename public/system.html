@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Système & Docs API</title>
+  <meta name="description" content="Documentation API REST et état du serveur EOCheck">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="users.html" class="nav-tab">🔑 Clés API</a>
+      <a href="settings.html" class="nav-tab">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab active">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="card">
+      <div class="card-title">
+        <span>⚙️ État du Système & Documentation d'API</span>
+      </div>
+
+      <div class="form-row" style="margin-bottom: 1.5rem;">
+        <div>
+          <label class="form-label">Domaine Cible</label>
+          <div style="font-weight: 600; color: var(--accent-cyan);">eocheck.eoxia.com</div>
+        </div>
+        <div>
+          <label class="form-label">Version de l'API</label>
+          <div style="font-weight: 600; color: #fff;">1.0.0 (Release Candidate)</div>
+        </div>
+        <div>
+          <label class="form-label">Statut du Serveur</label>
+          <div id="serverStatusBadge" class="status-badge completed">ONLINE</div>
+        </div>
+      </div>
+
+      <h4 style="margin: 1.5rem 0 0.5rem; color: var(--text-main);">Guide d'intégration API</h4>
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Pour effectuer des appels API externes (depuis vos applications clients ou scripts) :
+      </p>
+
+      <pre class="json-viewer"># Exemple de requête HTTP avec votre clé d'API
+POST /api/v1/scans
+Host: eocheck.eoxia.com
+Content-Type: application/json
+X-API-Token: eoc_live_votre_cle_api_ici
+
+{
+  "url": "https://eoxia.com",
+  "options": {
+    "numPages": 2,
+    "inspectTrackers": true
+  }
+}</pre>
+    </div>
+  </main>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

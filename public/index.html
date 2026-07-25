@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Scanner & Manager API</title>
+  <meta name="description" content="Plateforme de scan de cookies, de traqueurs et de gestion de clés d'API pour eocheck.eoxia.com">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="users.html" class="nav-tab">🔑 Clés API</a>
+      <a href="settings.html" class="nav-tab">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <a href="login.html" class="btn btn-primary btn-sm">Se connecter</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="card" style="text-align: center; padding: 4rem 2rem;">
+      <h1 style="font-family: 'Outfit', sans-serif; font-size: 2.5rem; margin-bottom: 1rem; color: #fff;">
+        🛡️ EOCheck Service Manager
+      </h1>
+      <p style="font-size: 1.1rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 2rem;">
+        Plateforme d'analyse et d'inspection de la confidentialité web pour <strong>eocheck.eoxia.com</strong>.
+        Scannez vos sites pour détecter les cookies, traqueurs et enregistreurs de session.
+      </p>
+
+      <div style="display: flex; gap: 1rem; justify-content: center;">
+        <a href="scans.html" class="btn btn-primary">🚀 Lancer un Scan</a>
+        <a href="settings.html" class="btn btn-secondary">⚙️ Réglages Général</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

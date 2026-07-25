@@ -1,0 +1,4 @@
+<IfModule mod_proxy.c>
+    ProxyPass /api/v1/ http://localhost:3000/api/v1/
+    ProxyPassReverse /api/v1/ http://localhost:3000/api/v1/
+</IfModule>
