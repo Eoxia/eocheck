@@ -331,7 +331,7 @@ function openImageLightbox(imgSrc, title) {
 }
 
 /**
- * Load & Render Scans List (Preserving exact parameters for each scan row)
+ * Load & Render Scans List
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
@@ -354,7 +354,6 @@ async function loadScans() {
 
     let hasActiveScans = false;
 
-    // Cache scans options by ID
     data.scans.forEach(s => {
       loadedScansCache[s.id] = s;
     });
@@ -381,7 +380,10 @@ async function loadScans() {
           <td style="color: var(--text-muted); font-size: 0.85rem;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</td>
           <td style="font-weight: 600; color: var(--accent-cyan); font-size: 0.85rem;">${formatDuration(scan.created_at, scan.completed_at)}</td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Inspecter</button>
+              <a href="scan-report.html?id=${scan.id}" target="_blank" class="btn btn-secondary btn-sm">📄 Rapport PDF</a>
+            </div>
           </td>
           <td>
             <button class="btn btn-primary btn-sm" onclick="rescanTargetByScanId('${scan.id}')">🔄 Relancer</button>
@@ -390,7 +392,6 @@ async function loadScans() {
       `;
     }).join('');
 
-    // Auto-polling for active processing scans every 2 seconds
     if (hasActiveScans) {
       if (pollingBadge) pollingBadge.style.display = 'inline';
       if (scanPollingTimer) clearTimeout(scanPollingTimer);
@@ -442,7 +443,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal (With Preserved Scan Options Summary)
+ * View Detailed Scan Result Modal
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
@@ -463,9 +464,14 @@ async function viewScanDetails(scanId) {
     const screenshots = result.screenshots || [];
 
     modalContent.innerHTML = `
-      <div style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-        <div style="font-size: 0.85rem; color: var(--text-muted);">ID du Scan :</div>
-        <div style="font-size: 1rem; font-weight: 700; color: var(--accent-emerald); font-family: monospace;">${escapeHtml(scan.id)}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">ID du Scan :</div>
+          <div style="font-size: 1rem; font-weight: 700; color: var(--accent-emerald); font-family: monospace;">${escapeHtml(scan.id)}</div>
+        </div>
+        <div>
+          <a href="scan-report.html?id=${scan.id}" target="_blank" class="btn btn-primary btn-sm">📄 Ouvrir la Page Rapport PDF ↗</a>
+        </div>
       </div>
 
       <div style="margin-bottom: 1.25rem;">

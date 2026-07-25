@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Rapport d'Analyse de Scan</title>
+  <meta name="description" content="Rapport complet d'inspection de confidentialité web pour eocheck.eoxia.com">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    /* Dedicated Print & PDF Export CSS Styles */
+    @media print {
+      body {
+        background: #fff !important;
+        color: #000 !important;
+        background-image: none !important;
+      }
+
+      .no-print, nav.navbar, footer, .toast-container, .btn {
+        display: none !important;
+      }
+
+      .container {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      .card {
+        background: #fff !important;
+        color: #000 !important;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        padding: 1.5rem !important;
+        page-break-inside: avoid;
+      }
+
+      h1, h2, h3, h4, .card-title, .form-label {
+        color: #000 !important;
+      }
+
+      .status-badge {
+        border: 1px solid #000 !important;
+        color: #000 !important;
+        background: transparent !important;
+      }
+
+      pre.json-viewer {
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+        max-height: none !important;
+        white-space: pre-wrap !important;
+      }
+
+      .screenshot-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+
+      .screenshot-card {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        page-break-inside: avoid;
+      }
+
+      .screenshot-card * {
+        color: #0f172a !important;
+      }
+
+      .screenshot-img {
+        border: 1px solid #94a3b8 !important;
+      }
+
+      .pdf-header-print {
+        display: flex !important;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid #0f172a;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+    }
+
+    .pdf-header-print {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar (Hidden during Print/PDF export) -->
+  <nav class="navbar no-print">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="users.html" class="nav-tab">🔑 Clés API</a>
+      <a href="settings.html" class="nav-tab">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- Action Toolbar (Hidden in PDF print mode) -->
+    <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <a href="scans.html" class="btn btn-secondary">⬅️ Retour à l'historique des scans</a>
+      
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn btn-secondary" onclick="copyReportUrl()">📋 Copier le lien du rapport</button>
+        <button class="btn btn-primary" onclick="window.print()">📄 Télécharger / Imprimer en PDF</button>
+      </div>
+    </div>
+
+    <!-- Print Header Branding (Visible ONLY during PDF export/Print) -->
+    <div class="pdf-header-print">
+      <div>
+        <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; color: #000;">🛡️ EOCheck - Rapport de Confidentialité Web</h2>
+        <p style="font-size: 0.85rem; color: #475569;">Généré par EOCheck Service Manager | eocheck.eoxia.com</p>
+      </div>
+      <div style="text-align: right; font-size: 0.85rem; color: #475569;">
+        <div>Document Officiel d'Audit</div>
+        <div id="printReportDate"></div>
+      </div>
+    </div>
+
+    <!-- Main Scan Report Container -->
+    <div id="reportContainer" class="card">
+      <p style="text-align: center; color: var(--text-muted); padding: 3rem;">Chargement du rapport de scan...</p>
+    </div>
+
+  </main>
+
+  <footer class="no-print">
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      loadDedicatedScanReport();
+    });
+
+    /**
+     * Load & Render Standalone Dedicated Scan Report Page
+     */
+    async function loadDedicatedScanReport() {
+      const container = document.getElementById('reportContainer');
+      if (!container) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const scanId = urlParams.get('id') || window.location.hash.replace('#', '');
+
+      if (!scanId) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: var(--accent-rose);">
+            <h3>❌ Aucun Identifiant de Scan Spécifié</h3>
+            <p style="margin-top: 0.5rem;">Veuillez fournir un ID de scan valide (ex: <code>scan-report.html?id=www.eoxia.com-20260725235008-0001</code>)</p>
+            <a href="scans.html" class="btn btn-primary" style="margin-top: 1rem;">Voir les scans</a>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
+        const res = await fetch(apiUrl);
+
+        if (!res.ok) throw new Error(`Scan introuvable ou indisponible (ID: ${scanId})`);
+
+        const scan = await parseJsonResponse(res);
+        const result = scan.result || {};
+        const opts = scan.options || {};
+        const privacy = result.privacy_inspection || {};
+        const scannedUrls = result.scanned_urls || [scan.target_url];
+        const screenshots = result.screenshots || [];
+
+        // Set page document title
+        document.title = `Rapport EOCheck - ${scan.target_url}`;
+        const printDateEl = document.getElementById('printReportDate');
+        if (printDateEl) printDateEl.textContent = `Date: ${formatDate(scan.created_at)}`;
+
+        container.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+            <div>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Identifiant Unique du Scan :</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: var(--accent-emerald); font-family: monospace;">${escapeHtml(scan.id)}</div>
+            </div>
+            <div class="no-print">
+              <button class="btn btn-primary btn-sm" onclick="rescanTargetByScanId('${scan.id}')">🔄 Relancer ce Scan</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <div style="font-size: 0.85rem; color: var(--text-muted);">URL Cible Analysée :</div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: var(--accent-cyan); word-break: break-all;">
+              <a href="${escapeHtml(scan.target_url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(scan.target_url)} 🔗</a>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.02); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div>
+              <span class="form-label">Statut du Scan</span>
+              <span class="status-badge ${scan.status}">${scan.status.toUpperCase()}</span>
+            </div>
+            <div>
+              <span class="form-label">Date Début</span>
+              <span style="font-weight: 600; color: #fff;">${formatDate(scan.created_at)}</span>
+            </div>
+            <div>
+              <span class="form-label">Date Fin</span>
+              <span style="font-weight: 600; color: #fff;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</span>
+            </div>
+            <div>
+              <span class="form-label">Durée d'Analyse</span>
+              <span style="font-weight: 700; color: var(--accent-cyan);">${formatDuration(scan.created_at, scan.completed_at)}</span>
+            </div>
+          </div>
+
+          <!-- Preserved Scan Options Box -->
+          <div style="margin-bottom: 1.5rem; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); padding: 1rem; border-radius: var(--radius-sm);">
+            <h4 style="font-size: 0.95rem; color: var(--primary); margin-bottom: 0.5rem;">🎛️ Paramètres de Configuration Demandés :</h4>
+            <div style="font-size: 0.88rem; color: var(--text-main); display: flex; flex-wrap: wrap; gap: 1.25rem;">
+              <span>📄 <b>Pages secondaires (crawl) :</b> ${opts.numPages !== undefined ? opts.numPages : 0}</span>
+              <span>⏱️ <b>Timeout :</b> ${opts.timeout || 60}s</span>
+              <span>🕶️ <b>Mode Headless :</b> ${opts.headless !== false ? 'Oui' : 'Non'}</span>
+              <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
+              <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
+              <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
+            </div>
+          </div>
+
+          <!-- Scanned URLs List Section -->
+          <div style="margin-bottom: 1.75rem; background: rgba(0, 0, 0, 0.3); padding: 1.2rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <h4 style="font-size: 1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">🔗 Liste des URLs Explorées & Scannées (${scannedUrls.length}) :</h4>
+            <ol style="padding-left: 1.4rem; color: var(--text-main); font-size: 0.9rem; word-break: break-all;">
+              ${scannedUrls.map(u => `<li style="margin-bottom: 0.3rem;"><a href="${escapeHtml(u)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(u)}</a></li>`).join('')}
+            </ol>
+          </div>
+
+          <!-- Page Screenshots Gallery Section -->
+          ${screenshots && screenshots.length > 0 ? `
+            <div style="margin-bottom: 2rem;">
+              <h4 style="font-size: 1rem; color: var(--accent-emerald); margin-bottom: 0.75rem;">📸 Captures d'Écran des Pages Scannées (${screenshots.length}) :</h4>
+              <div class="screenshot-grid">
+                ${screenshots.map(s => `
+                  <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
+                    <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.5rem; word-break: break-all;">${escapeHtml(s.url)}</div>
+                    <img src="${s.preview}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Privacy Inspection Findings -->
+          <div style="margin-bottom: 1.75rem; background: rgba(0, 0, 0, 0.2); padding: 1.2rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <h3 style="font-size: 1.05rem; color: #fff; margin-bottom: 0.75rem;">🛡️ Bilan d'Inspection de Confidentialité & Sécurité</h3>
+            
+            ${privacy.trackers_detected && privacy.trackers_detected.length > 0 ? `
+              <div style="margin-bottom: 1rem;">
+                <h4 style="font-size: 0.9rem; color: var(--accent-rose); margin-bottom: 0.4rem;">🚨 Traqueurs & Analytics Identifiés (${privacy.trackers_detected.length}) :</h4>
+                <ul style="padding-left: 1.2rem; color: var(--text-main); font-size: 0.9rem;">
+                  ${privacy.trackers_detected.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+                </ul>
+              </div>
+            ` : `
+              <div style="color: var(--accent-emerald); font-size: 0.9rem; margin-bottom: 0.75rem;">✅ Aucun traqueur d'analytics tiers n'a été détecté.</div>
+            `}
+
+            ${privacy.session_recorders_detected && privacy.session_recorders_detected.length > 0 ? `
+              <div style="margin-bottom: 1rem;">
+                <h4 style="font-size: 0.9rem; color: var(--accent-amber); margin-bottom: 0.4rem;">⚠️ Enregistreurs de Session (Session Replay) :</h4>
+                <ul style="padding-left: 1.2rem; color: var(--text-main); font-size: 0.9rem;">
+                  ${privacy.session_recorders_detected.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Full JSON Payload Section (Collapsible in UI) -->
+          <div style="margin-top: 2rem;">
+            <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Fichier / Payload JSON Complet :</h4>
+            <pre class="json-viewer">${escapeHtml(JSON.stringify(scan, null, 2))}</pre>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: var(--accent-rose);">
+            <h3>❌ Erreur lors du Chargement du Rapport</h3>
+            <p style="margin-top: 0.5rem;">${escapeHtml(err.message)}</p>
+            <a href="scans.html" class="btn btn-primary" style="margin-top: 1rem;">Retour aux scans</a>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * Copy current scan report URL to clipboard
+     */
+    function copyReportUrl() {
+      navigator.clipboard.writeText(window.location.href);
+      showToast('Lien permanent du rapport copié dans le presse-papier !', 'success');
+    }
+  </script>
+</body>
+</html>
