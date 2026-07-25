@@ -1,0 +1,3 @@
+[submodule "blacklight-query"]
+	path = blacklight-query
+	url = https://github.com/Eoxia/blacklight-query.git
