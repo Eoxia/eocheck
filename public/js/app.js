@@ -489,7 +489,7 @@ async function handleSaveIpSettings() {
 }
 
 /**
- * Load Login Audit Trail Logs (IP, ID, Nom, Prénom, Email, Statut)
+ * Load Login Audit Trail Logs
  */
 async function loadLoginLogs() {
   const tbody = document.getElementById('loginLogsTableBody');
@@ -588,7 +588,7 @@ async function revokeToken(tokenId) {
 }
 
 /**
- * Load Admin Users (With Nom & Prénom rendering)
+ * Load Admin Users
  */
 async function loadAdminUsers() {
   const tbody = document.getElementById('usersTableBody') || document.getElementById('settingsUsersTableBody');
@@ -703,31 +703,57 @@ function copyRawToken() {
 }
 
 /**
- * Admin: Handle Create User / Admin Submit (With Nom and Prénom)
+ * Handle Create User / Admin Account (Works with both Admin and Public registration)
  */
 async function handleCreateUserAdmin(event) {
   event.preventDefault();
   const email = document.getElementById('newEmail').value;
   const password = document.getElementById('newPassword').value;
-  const role = document.getElementById('newRole').value;
+  const role = document.getElementById('newRole') ? document.getElementById('newRole').value : 'user';
   const firstName = document.getElementById('newFirstName') ? document.getElementById('newFirstName').value : '';
   const lastName = document.getElementById('newLastName') ? document.getElementById('newLastName').value : '';
 
+  if (!email || !password) {
+    showToast('L\'adresse e-mail et le mot de passe sont requis.', 'error');
+    return;
+  }
+
+  const isUserAdmin = currentUser && currentUser.role === 'admin' && authToken;
+  const endpoint = isUserAdmin ? '/api/v1/admin/users' : '/api/v1/auth/register';
+
   try {
-    const res = await secureFetch('/api/v1/admin/users', {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    let res = await secureFetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
+      headers,
       body: JSON.stringify({ email, password, role, first_name: firstName, last_name: lastName })
     });
 
-    const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la création');
+    // Fallback to public registration endpoint if admin endpoint returns unauthorized/forbidden
+    if ((res.status === 401 || res.status === 403) && endpoint !== '/api/v1/auth/register') {
+      res = await secureFetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role, first_name: firstName, last_name: lastName })
+      });
+    }
 
-    showToast(`Compte créé avec succès (${data.user.role}) !`, 'success');
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la création du compte');
+
+    showToast(`Compte pour ${email} créé avec succès (${data.user.role}) !`, 'success');
     closeModal('createUserModal');
+
+    // Reset inputs
+    if (document.getElementById('newEmail')) document.getElementById('newEmail').value = '';
+    if (document.getElementById('newPassword')) document.getElementById('newPassword').value = '';
+    if (document.getElementById('newFirstName')) document.getElementById('newFirstName').value = '';
+    if (document.getElementById('newLastName')) document.getElementById('newLastName').value = '';
+
     loadAdminUsers();
   } catch (err) {
     showToast(err.message, 'error');
