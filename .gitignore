@@ -1,15 +1,19 @@
 # Dependencies
 node_modules/
 
-# Environment files (contains local secrets)
+# Environment files (contains local secrets & API keys)
 .env
 .env.local
 .env.production
+.env.staging
 
-# Database storage
-data/*.db
-data/*.sqlite
-data/*.sqlite-journal
+# Database storage (local SQLite database files ignored)
+data/*
+!data/.gitkeep
+
+# Scan Outputs & Screenshots
+outputs/*
+!outputs/.gitkeep
 
 # Logs & Temp files
 npm-debug.log*
