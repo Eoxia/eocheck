@@ -28,41 +28,65 @@ export function updateScanProgress(scanId, percent, stepMessage) {
 }
 
 /**
- * Generate a visual SVG preview screenshot card for a given URL
+ * Locate Chrome executable path if present
  */
-function generatePageScreenshotSvg(url, title, status = 200, trackersCount = 0) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="360" viewBox="0 0 600 360">
-    <rect width="600" height="360" fill="#0f172a" rx="12"/>
-    <!-- Browser Header Bar -->
-    <rect width="600" height="36" fill="#1e293b" rx="12"/>
-    <circle cx="20" cy="18" r="5" fill="#f43f5e"/>
-    <circle cx="36" cy="18" r="5" fill="#f59e0b"/>
-    <circle cx="52" cy="18" r="5" fill="#10b981"/>
-    <!-- Address Bar -->
-    <rect x="70" y="8" width="460" height="20" fill="#0f172a" rx="4"/>
-    <text x="80" y="22" font-family="monospace" font-size="11" fill="#06b6d4">${url.substring(0, 55)}</text>
-    <!-- Content Body -->
-    <rect x="30" y="60" width="340" height="24" fill="#334155" rx="4"/>
-    <rect x="30" y="96" width="540" height="12" fill="#1e293b" rx="3"/>
-    <rect x="30" y="116" width="480" height="12" fill="#1e293b" rx="3"/>
-    <rect x="30" y="136" width="510" height="12" fill="#1e293b" rx="3"/>
-    
-    <!-- Visual Cards -->
-    <rect x="30" y="170" width="160" height="100" fill="#1e293b" rx="8" stroke="#334155"/>
-    <rect x="210" y="170" width="160" height="100" fill="#1e293b" rx="8" stroke="#334155"/>
-    <rect x="390" y="170" width="180" height="100" fill="#1e293b" rx="8" stroke="#334155"/>
+function findChromeExecutable() {
+  const possiblePaths = [
+    'C:\\Users\\laure\\.cache\\puppeteer\\chrome\\win64-150.0.7871.24\\chrome-win64\\chrome.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  ];
 
-    <!-- Footer Stats Banner -->
-    <rect x="0" y="310" width="600" height="50" fill="#1e293b"/>
-    <text x="20" y="338" font-family="sans-serif" font-size="13" font-weight="bold" fill="#f8fafc">${title || 'Aperçu de la page'}</text>
-    <text x="440" y="338" font-family="sans-serif" font-size="12" fill="${trackersCount > 0 ? '#f43f5e' : '#10b981'}">Statut: ${status} | ${trackersCount} traqueur(s)</text>
-  </svg>`;
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
 }
 
 /**
- * Queue and execute a site scan with interactive progress tracking & screenshots
+ * Attempt real website screenshot capture using Puppeteer
+ */
+async function captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless = true, timeoutMs = 30000) {
+  try {
+    const puppeteer = await import('puppeteer');
+    const executablePath = findChromeExecutable();
+
+    const launchOpts = {
+      headless: isHeadless ? 'new' : false,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    };
+    if (executablePath) {
+      launchOpts.executablePath = executablePath;
+    }
+
+    const browser = await puppeteer.default.launch(launchOpts);
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 800)));
+
+    const screenshotBase64 = await page.screenshot({ type: 'jpeg', quality: 75, encoding: 'base64' });
+    await browser.close();
+
+    return `data:image/jpeg;base64,${screenshotBase64}`;
+  } catch (err) {
+    console.warn(`[Puppeteer Screenshot Notice] ${err.message}. Using live web screenshot fallback...`);
+    return null;
+  }
+}
+
+/**
+ * Fallback real live website screenshot URL
+ */
+function getRealWebsiteScreenshotUrl(pageUrl) {
+  return `https://image.thum.io/get/width/800/crop/600/${pageUrl}`;
+}
+
+/**
+ * Queue and execute a site scan with interactive progress tracking & real website screenshots
  */
 export async function runScanJob(scanId, targetUrl, options = {}) {
   try {
@@ -85,7 +109,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
     const takeScreenshots = options.takeScreenshots !== false;
 
     // Stage 2: Connect & Analyze Cookies (40%)
-    await new Promise(r => setTimeout(r, 600)); // Small delay for smooth progress UI polling
+    await new Promise(r => setTimeout(r, 600));
     updateScanProgress(scanId, 40, 'Connexion à la page cible et extraction des cookies...');
 
     let scanResult = null;
@@ -114,10 +138,10 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
         };
       }
     } catch (collectorErr) {
-      console.log(`[Scanner Service] Native blacklight-collector notice: ${collectorErr.message}. Running built-in HTTP & Puppeteer inspector...`);
+      console.log(`[Scanner Service] Native blacklight-collector notice: ${collectorErr.message}. Running HTTP & Puppeteer inspector...`);
     }
 
-    // Built-in inspector fallback
+    // Inspector fallback
     if (!scanResult) {
       const inspectStartTime = Date.now();
       let httpStatus = null;
@@ -173,21 +197,29 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
       }
 
       // Stage 4: Screenshots Generation (90%)
-      updateScanProgress(scanId, 90, "Génération des captures d'écran et du rapport d'analyse...");
-      await new Promise(r => setTimeout(r, 400));
+      updateScanProgress(scanId, 90, "Génération des vraies captures d'écran du site...");
 
-      // Build screenshots array for scanned URLs if enabled
       const screenshots = [];
       if (takeScreenshots) {
-        scannedUrls.forEach((pageUrl, idx) => {
+        for (let idx = 0; idx < scannedUrls.length; idx++) {
+          const pageUrl = scannedUrls[idx];
           const pageTitle = idx === 0 ? "Page d'accueil (Accueil)" : `Page secondaire #${idx} (${new URL(pageUrl).pathname})`;
+
+          // Try real Puppeteer screenshot first
+          let realImgSrc = await captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless, timeoutMs);
+          
+          // Fallback to live screenshot renderer URL
+          if (!realImgSrc) {
+            realImgSrc = getRealWebsiteScreenshotUrl(pageUrl);
+          }
+
           screenshots.push({
             url: pageUrl,
             title: pageTitle,
             status: httpStatus || 200,
-            preview: generatePageScreenshotSvg(pageUrl, pageTitle, httpStatus || 200, trackersDetected.length)
+            preview: realImgSrc
           });
-        });
+        }
       }
 
       const setCookieHeader = headers['set-cookie'] || '';
