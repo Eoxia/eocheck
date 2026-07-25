@@ -296,6 +296,32 @@ async function rescanTarget(targetUrl) {
 }
 
 /**
+ * Open image in a full-size preview Lightbox Modal
+ */
+function openImageLightbox(imgSrc, title) {
+  let modal = document.getElementById('imageLightboxModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'imageLightboxModal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <div class="modal" style="max-width: 900px; text-align: center; background: #0b0f19;">
+        <div class="modal-header">
+          <h3 class="modal-title" id="lightboxTitle">Aperçu de la Capture d'Écran</h3>
+          <button class="close-btn" onclick="closeModal('imageLightboxModal')">&times;</button>
+        </div>
+        <img id="lightboxImg" src="" style="width: 100%; max-height: 75vh; object-fit: contain; border-radius: 8px; border: 1px solid var(--border-color);" />
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('lightboxTitle').textContent = title || 'Aperçu de la capture d\'écran';
+  document.getElementById('lightboxImg').src = imgSrc;
+  openModal('imageLightboxModal');
+}
+
+/**
  * Load & Render Scans List
  */
 async function loadScans() {
@@ -402,7 +428,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal
+ * View Detailed Scan Result Modal (With Lightbox-enabled Screenshots Gallery)
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
@@ -455,13 +481,13 @@ async function viewScanDetails(scanId) {
         </ul>
       </div>
 
-      <!-- Page Screenshots Gallery Section -->
+      <!-- Page Screenshots Gallery Section (Clickable Lightbox Preview) -->
       ${screenshots && screenshots.length > 0 ? `
         <div style="margin-bottom: 1.5rem;">
-          <h4 style="font-size: 0.95rem; color: var(--accent-emerald); margin-bottom: 0.5rem;">📸 Captures d'Écran des Pages Scannées (${screenshots.length}) :</h4>
+          <h4 style="font-size: 0.95rem; color: var(--accent-emerald); margin-bottom: 0.5rem;">📸 Captures d'Écran des Pages Scannées (${screenshots.length}) - <i>Cliquez pour agrandir</i> :</h4>
           <div class="screenshot-grid">
             ${screenshots.map(s => `
-              <div class="screenshot-card">
+              <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                 <div style="font-size: 0.82rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
                 <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">${escapeHtml(s.url)}</div>
                 <img src="${s.preview}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
