@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Scanner & Manager API</title>
+  <meta name="description" content="Plateforme de scan de cookies, de traqueurs et de gestion de clés d'API pour eocheck.eoxia.com">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="#" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs" style="display: none;">
+      <button class="nav-tab active" onclick="switchTab('scansTab')">🔍 Scans & Inspecteur</button>
+      <button class="nav-tab" onclick="switchTab('usersTab')">🔑 Utilisateurs & Clés API</button>
+      <button class="nav-tab" onclick="switchTab('systemTab')">⚙️ Système & Docs API</button>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- Auth buttons or user profile info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- Auth Section / Login & Register (Shown if not logged in) -->
+    <div id="authSection" class="card" style="max-width: 480px; margin: 3rem auto;">
+      <div class="card-title">
+        <span id="authTitle">🔑 Connexion EOCheck</span>
+      </div>
+      
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Adresse E-mail</label>
+          <input type="email" id="loginEmail" class="form-control" placeholder="admin@eoxia.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Mot de passe</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Se connecter</button>
+      </form>
+
+      <form id="registerForm" onsubmit="handleRegister(event)" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="regEmail">Adresse E-mail</label>
+          <input type="email" id="regEmail" class="form-control" placeholder="user@eoxia.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="regPassword">Mot de passe</label>
+          <input type="password" id="regPassword" class="form-control" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Créer un compte</button>
+      </form>
+
+      <div style="margin-top: 1.25rem; text-align: center;">
+        <a href="#" id="toggleAuthBtn" onclick="toggleAuthMode(event)" style="color: var(--primary); font-size: 0.9rem; text-decoration: none;">Pas encore de compte ? S'inscrire</a>
+      </div>
+    </div>
+
+    <!-- TAB 1: Scans & Inspector -->
+    <div id="scansTab" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>🚀 Lancer un Nouveau Scan de Confidentialité</span>
+        </div>
+        
+        <form onsubmit="handleCreateScan(event)">
+          <div class="form-group">
+            <label class="form-label" for="scanUrl">URL Cible à Scanner</label>
+            <input type="url" id="scanUrl" class="form-control" placeholder="https://eoxia.com" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="scanPages">Nombre de pages secondaires (crawl)</label>
+              <input type="number" id="scanPages" class="form-control" value="0" min="0" max="10">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="scanTimeout">Timeout (secondes)</label>
+              <input type="number" id="scanTimeout" class="form-control" value="60" min="10" max="180">
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 1.25rem;">
+            <label class="checkbox-group">
+              <input type="checkbox" id="scanHeadless" checked> Mode Headless (Navigateur masqué)
+            </label>
+            <label class="checkbox-group">
+              <input type="checkbox" id="scanCookies" checked> Inspecter les Cookies
+            </label>
+            <label class="checkbox-group">
+              <input type="checkbox" id="scanTrackers" checked> Détecter les Traqueurs & Analytics
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">⚡ Démarrer l'Analyse</button>
+        </form>
+      </div>
+
+      <!-- Scans List -->
+      <div class="card">
+        <div class="card-title" style="justify-content: space-between;">
+          <span>📋 Historique des Scans</span>
+          <button class="btn btn-secondary btn-sm" onclick="loadScans()">🔄 Actualiser</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Statut</th>
+                <th>URL Cible</th>
+                <th>Date de Création</th>
+                <th>Durée / Fin</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="scansTableBody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-dim);">Chargement des scans...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Users & API Keys Management -->
+    <div id="usersTab" class="tab-content">
+      
+      <!-- Admin User Management Panel (Only visible for Admins) -->
+      <div id="adminUserSection" class="card" style="display: none;">
+        <div class="card-title" style="justify-content: space-between;">
+          <span>👥 Gestion des Utilisateurs Administrateurs & Comptes</span>
+          <button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">➕ Nouveau Compte / Admin</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>E-mail</th>
+                <th>Rôle</th>
+                <th>Clés API Actives</th>
+                <th>Date de création</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-dim);">Chargement des utilisateurs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- API Keys Allocation & Management -->
+      <div class="card">
+        <div class="card-title" style="justify-content: space-between;">
+          <span>🔑 Générateur & Affectation de Clés API</span>
+          <button class="btn btn-primary btn-sm" onclick="openCreateTokenModal()">✨ Générer une Clé API</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nom de la clé</th>
+                <th>Application Client</th>
+                <th>Préfixe de Clé</th>
+                <th>Créée le</th>
+                <th>Dernière utilisation</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tokensTableBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-dim);">Chargement des clés API...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: System & Docs -->
+    <div id="systemTab" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>⚙️ État du Système & Documentation d'API</span>
+        </div>
+
+        <div class="form-row" style="margin-bottom: 1.5rem;">
+          <div>
+            <label class="form-label">Domaine Cible</label>
+            <div style="font-weight: 600; color: var(--accent-cyan);">eocheck.eoxia.com</div>
+          </div>
+          <div>
+            <label class="form-label">Version de l'API</label>
+            <div style="font-weight: 600; color: #fff;">1.0.0 (Release Candidate)</div>
+          </div>
+          <div>
+            <label class="form-label">Statut du Serveur</label>
+            <div id="serverStatusBadge" class="status-badge completed">ONLINE</div>
+          </div>
+        </div>
+
+        <h4 style="margin: 1rem 0 0.5rem; color: var(--text-main);">Guide d'intégration API</h4>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Pour effectuer des appels API externes (depuis vos applications clients ou scripts) :
+        </p>
+
+        <pre class="json-viewer"># Exemple de requête HTTP avec votre clé d'API
+POST /api/v1/scans
+Host: eocheck.eoxia.com
+Content-Type: application/json
+X-API-Token: eoc_live_votre_cle_api_ici
+
+{
+  "url": "https://eoxia.com",
+  "options": {
+    "numPages": 2,
+    "inspectTrackers": true
+  }
+}</pre>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: Scan Result Details Inspector -->
+  <div id="scanResultModal" class="modal-backdrop">
+    <div class="modal" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="scanModalTitle">Détails du Scan</h3>
+        <button class="close-btn" onclick="closeModal('scanResultModal')">&times;</button>
+      </div>
+      <div id="scanModalContent">
+        <!-- Scan details rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create User / Admin Account -->
+  <div id="createUserModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Créer un Nouveau Compte</h3>
+        <button class="close-btn" onclick="closeModal('createUserModal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateUserAdmin(event)">
+        <div class="form-group">
+          <label class="form-label" for="newEmail">Adresse E-mail</label>
+          <input type="email" id="newEmail" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPassword">Mot de passe</label>
+          <input type="password" id="newPassword" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newRole">Rôle du compte</label>
+          <select id="newRole" class="form-control">
+            <option value="user">Utilisateur Standard (User)</option>
+            <option value="admin">Administrateur (Admin)</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Créer le compte</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Create / Allocate API Key -->
+  <div id="createTokenModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Générer / Affecter une Clé API</h3>
+        <button class="close-btn" onclick="closeModal('createTokenModal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateToken(event)">
+        <div id="userSelectGroup" class="form-group" style="display: none;">
+          <label class="form-label" for="tokenUserSelect">Affecter à l'utilisateur</label>
+          <select id="tokenUserSelect" class="form-control">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenName">Nom de la Clé API</label>
+          <input type="text" id="tokenName" class="form-control" placeholder="ex: Scanner Production Key" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenClientApp">Application Client / Service</label>
+          <input type="text" id="tokenClientApp" class="form-control" value="api_client">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenExpiresDays">Expiration (Jours, laisser vide pour sans limite)</label>
+          <input type="number" id="tokenExpiresDays" class="form-control" placeholder="365">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Générer la Clé</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Display Newly Created Raw API Key -->
+  <div id="showKeyModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 Votre nouvelle Clé API</h3>
+        <button class="close-btn" onclick="closeModal('showKeyModal')">&times;</button>
+      </div>
+      <p style="font-size: 0.9rem; color: var(--text-muted);">
+        Veuillez copier cette clé API maintenant. Pour des raisons de sécurité, **elle ne sera plus jamais affichée**.
+      </p>
+
+      <div class="key-highlight" id="rawTokenDisplay">eoc_live_...</div>
+
+      <button class="btn btn-primary" style="width: 100%;" onclick="copyRawToken()">📋 Copier la Clé dans le presse-papier</button>
+    </div>
+  </div>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -7,11 +7,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'local_dev_jwt_secret_eocheck_2026'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 /**
- * Register a new user
+ * Register a new user (First user automatically gets admin role)
  */
 export async function register(req, res) {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Bad Request', message: 'Email and password are required' });
@@ -22,6 +22,11 @@ export async function register(req, res) {
       return res.status(409).json({ error: 'Conflict', message: 'User with this email already exists' });
     }
 
+    // Check count of existing users
+    const countRow = db.prepare('SELECT COUNT(*) as count FROM users').get();
+    const isFirstUser = countRow.count === 0;
+    const userRole = isFirstUser ? 'admin' : (role === 'admin' ? 'admin' : 'user');
+
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
 
@@ -29,14 +34,14 @@ export async function register(req, res) {
       userId,
       email,
       passwordHash,
-      'user'
+      userRole
     );
 
-    const token = jwt.sign({ id: userId, email, role: 'user' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign({ id: userId, email, role: userRole }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     return res.status(201).json({
-      message: 'User registered successfully',
-      user: { id: userId, email, role: 'user' },
+      message: `User registered successfully as ${userRole}`,
+      user: { id: userId, email, role: userRole },
       token
     });
   } catch (error) {
