@@ -245,7 +245,7 @@ async function loadScans() {
 }
 
 /**
- * Handle Create Scan Submission (Replaces alert popup with discreet toast)
+ * Handle Create Scan Submission (Displays discreet toast notification with formatted ID)
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -272,7 +272,7 @@ async function handleCreateScan(event) {
     const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors du lancement du scan');
 
-    showToast(`Scan lancé avec succès ! (ID: ${data.scan_id.substring(0, 8)}...)`, 'success');
+    showToast(`Scan lancé avec succès ! ID: ${data.scan_id}`, 'success', 6000);
     loadScans();
   } catch (err) {
     showToast(err.message, 'error');
@@ -298,6 +298,11 @@ async function viewScanDetails(scanId) {
     const privacy = result.privacy_inspection || {};
 
     modalContent.innerHTML = `
+      <div style="margin-bottom: 1rem;">
+        <div style="font-size: 0.85rem; color: var(--text-muted);">ID du Scan :</div>
+        <div style="font-size: 1rem; font-weight: 700; color: var(--accent-emerald); font-family: monospace;">${escapeHtml(scan.id)}</div>
+      </div>
+
       <div style="margin-bottom: 1rem;">
         <div style="font-size: 0.85rem; color: var(--text-muted);">URL Cible :</div>
         <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan); word-break: break-all;">${escapeHtml(scan.target_url)}</div>

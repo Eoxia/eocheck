@@ -1,10 +1,18 @@
+// Override native window.alert to prevent any browser popup boxes
+window.alert = function(msg) {
+  if (typeof showToast === 'function') {
+    showToast(msg, 'info');
+  } else {
+    console.log('[Notification]', msg);
+  }
+};
+
 // Smart API URL Resolver
 function getApiUrl(endpoint) {
   const cleanEndpoint = endpoint.replace(/^\/api\/v1\/?/, '').replace(/^\//, '');
   
   // If loaded via WAMP/Apache on port 80 or without node proxy, fallback to Node port 3000 if needed
   if (window.location.port !== '3000' && window.location.hostname === 'localhost' && !window.location.pathname.includes('/api/')) {
-    // Check if WAMP Apache isn't routing /api/v1 natively
     return `http://localhost:3000/api/v1/${cleanEndpoint}`;
   }
 
@@ -25,7 +33,6 @@ async function fetchCsrfToken() {
     
     const contentType = res.headers.get('content-type') || '';
     if (!res.ok || !contentType.includes('application/json')) {
-      // Secondary fallback try port 3000 directly if WAMP Apache 404
       if (window.location.port !== '3000' && window.location.hostname === 'localhost') {
         const fallbackRes = await fetch('http://localhost:3000/api/v1/csrf-token');
         if (fallbackRes.ok) {
@@ -77,7 +84,6 @@ async function secureFetch(url, options = {}) {
 
   let response = await fetch(fullUrl, options);
 
-  // If CSRF expired (403), refresh CSRF token once and retry automatically
   if (response.status === 403 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     console.log('[CSRF Manager] CSRF token rejected. Refreshing token and retrying request...');
     await fetchCsrfToken();

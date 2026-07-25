@@ -1,6 +1,35 @@
-import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { runScanJob } from '../services/scannerService.js';
+
+/**
+ * Generate formatted custom scan ID: url-AAAMMJJHHMMSS-0001
+ * Example: www.eoxia.com-20260725234918-0001
+ */
+export function generateFormattedScanId(targetUrl) {
+  let urlSlug = 'url';
+  try {
+    const parsed = new URL(targetUrl);
+    urlSlug = parsed.hostname.toLowerCase().replace(/[^a-z0-9\.-]/g, '');
+  } catch (e) {
+    urlSlug = 'url';
+  }
+
+  const now = new Date();
+  const YYYY = now.getFullYear();
+  const MM = String(now.getMonth() + 1).padStart(2, '0');
+  const DD = String(now.getDate()).padStart(2, '0');
+  const HH = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const SS = String(now.getSeconds()).padStart(2, '0');
+
+  const timestamp = `${YYYY}${MM}${DD}${HH}${mm}${SS}`;
+
+  // Get total scan count + 1 for 4-digit sequence (0001, 0002, ...)
+  const countRow = db.prepare('SELECT COUNT(*) as total FROM scans').get();
+  const sequenceNum = String((countRow ? countRow.total : 0) + 1).padStart(4, '0');
+
+  return `${urlSlug}-${timestamp}-${sequenceNum}`;
+}
 
 /**
  * Submit a website scan request
@@ -20,7 +49,7 @@ export function createScan(req, res) {
       return res.status(400).json({ error: 'Bad Request', message: 'Invalid URL format. Provide a full URL (e.g., https://example.com)' });
     }
 
-    const scanId = uuidv4();
+    const scanId = generateFormattedScanId(url);
     const userId = req.user ? req.user.id : null;
 
     db.prepare(
