@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Utilisateurs & Clés API</title>
+  <meta name="description" content="Gestion des comptes administrateurs, utilisateurs et des clés API">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans & Inspecteur</a>
+      <a href="users.html" class="nav-tab active">🔑 Utilisateurs & Clés API</a>
+      <a href="system.html" class="nav-tab">⚙️ Système & Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- Admin User Management Panel -->
+    <div id="adminUserSection" class="card" style="display: none;">
+      <div class="card-title" style="justify-content: space-between;">
+        <span>👥 Gestion des Comptes & Administrateurs</span>
+        <button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">➕ Nouveau Compte / Admin</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>E-mail</th>
+              <th>Rôle</th>
+              <th>Clés API Actives</th>
+              <th>Date de création</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-dim);">Chargement des utilisateurs...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- API Keys Allocation & Management -->
+    <div class="card">
+      <div class="card-title" style="justify-content: space-between;">
+        <span>🔑 Générateur & Affectation de Clés API</span>
+        <button class="btn btn-primary btn-sm" onclick="openCreateTokenModal()">✨ Générer une Clé API</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nom de la clé</th>
+              <th>Application Client</th>
+              <th>Préfixe de Clé</th>
+              <th>Créée le</th>
+              <th>Dernière utilisation</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tokensTableBody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-dim);">Chargement des clés API...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: Create User / Admin Account -->
+  <div id="createUserModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Créer un Nouveau Compte</h3>
+        <button class="close-btn" onclick="closeModal('createUserModal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateUserAdmin(event)">
+        <div class="form-group">
+          <label class="form-label" for="newEmail">Adresse E-mail</label>
+          <input type="email" id="newEmail" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPassword">Mot de passe</label>
+          <input type="password" id="newPassword" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newRole">Rôle du compte</label>
+          <select id="newRole" class="form-control">
+            <option value="user">Utilisateur Standard (User)</option>
+            <option value="admin">Administrateur (Admin)</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Créer le compte</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Create / Allocate API Key -->
+  <div id="createTokenModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Générer / Affecter une Clé API</h3>
+        <button class="close-btn" onclick="closeModal('createTokenModal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateToken(event)">
+        <div id="userSelectGroup" class="form-group" style="display: none;">
+          <label class="form-label" for="tokenUserSelect">Affecter à l'utilisateur</label>
+          <select id="tokenUserSelect" class="form-control">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenName">Nom de la Clé API</label>
+          <input type="text" id="tokenName" class="form-control" placeholder="ex: Production API Key" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenClientApp">Application Client / Service</label>
+          <input type="text" id="tokenClientApp" class="form-control" value="api_client">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tokenExpiresDays">Expiration (Jours, laisser vide pour sans limite)</label>
+          <input type="number" id="tokenExpiresDays" class="form-control" placeholder="365">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Générer la Clé</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Display Newly Created Raw API Key -->
+  <div id="showKeyModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 Votre nouvelle Clé API</h3>
+        <button class="close-btn" onclick="closeModal('showKeyModal')">&times;</button>
+      </div>
+      <p style="font-size: 0.9rem; color: var(--text-muted);">
+        Veuillez copier cette clé API maintenant. Pour des raisons de sécurité, **elle ne sera plus jamais affichée**.
+      </p>
+
+      <div class="key-highlight" id="rawTokenDisplay">eoc_live_...</div>
+
+      <button class="btn btn-primary" style="width: 100%;" onclick="copyRawToken()">📋 Copier la Clé dans le presse-papier</button>
+    </div>
+  </div>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      loadTokens();
+    });
+  </script>
+</body>
+</html>

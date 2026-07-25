@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (authToken) {
     fetchProfile();
   } else {
-    showAuthSection();
+    renderUserNavbar();
   }
 });
 
@@ -28,7 +28,6 @@ async function fetchProfile() {
     currentUser = data.user;
 
     renderUserNavbar();
-    showDashboard();
   } catch (err) {
     console.warn('Authentication check failed:', err.message);
     logout();
@@ -43,67 +42,29 @@ function renderUserNavbar() {
   const navTabs = document.getElementById('navTabs');
   
   if (currentUser) {
-    navTabs.style.display = 'flex';
-    userNav.innerHTML = `
-      <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
-      <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(currentUser.email)}</span>
-      <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
-    `;
+    if (navTabs) navTabs.style.display = 'flex';
+    if (userNav) {
+      userNav.innerHTML = `
+        <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
+        <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(currentUser.email)}</span>
+        <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
+      `;
+    }
 
-    // Show Admin tab panel if user is admin
+    // Show Admin user section if present on current page
     const adminUserSection = document.getElementById('adminUserSection');
-    if (currentUser.role === 'admin') {
-      adminUserSection.style.display = 'block';
-      loadAdminUsers();
-    } else {
-      adminUserSection.style.display = 'none';
+    if (adminUserSection) {
+      if (currentUser.role === 'admin') {
+        adminUserSection.style.display = 'block';
+        loadAdminUsers();
+      } else {
+        adminUserSection.style.display = 'none';
+      }
     }
   } else {
-    navTabs.style.display = 'none';
-    userNav.innerHTML = ``;
-  }
-}
-
-/**
- * Show Auth Section (Login / Register)
- */
-function showAuthSection() {
-  document.getElementById('authSection').style.display = 'block';
-  document.getElementById('navTabs').style.display = 'none';
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-}
-
-/**
- * Show Dashboard & load initial tab
- */
-function showDashboard() {
-  document.getElementById('authSection').style.display = 'none';
-  switchTab('scansTab');
-}
-
-/**
- * Tab Switcher
- */
-function switchTab(tabId) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
-
-  const targetTab = document.getElementById(tabId);
-  if (targetTab) {
-    targetTab.classList.add('active');
-  }
-
-  // Highlight active nav button
-  const indexMap = { 'scansTab': 0, 'usersTab': 1, 'systemTab': 2 };
-  const buttons = document.querySelectorAll('.nav-tab');
-  if (buttons[indexMap[tabId]]) {
-    buttons[indexMap[tabId]].classList.add('active');
-  }
-
-  if (tabId === 'scansTab') loadScans();
-  if (tabId === 'usersTab') {
-    loadTokens();
-    if (currentUser && currentUser.role === 'admin') loadAdminUsers();
+    if (userNav) {
+      userNav.innerHTML = `<a href="login.html" class="btn btn-primary btn-sm">Se connecter</a>`;
+    }
   }
 }
 
@@ -131,7 +92,7 @@ function toggleAuthMode(event) {
 }
 
 /**
- * Login Submit Handler
+ * Login Submit Handler (Uses secureFetch with CSRF Token)
  */
 async function handleLogin(event) {
   event.preventDefault();
@@ -139,7 +100,7 @@ async function handleLogin(event) {
   const password = document.getElementById('loginPassword').value;
 
   try {
-    const res = await fetch('/api/v1/auth/login', {
+    const res = await secureFetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -153,14 +114,14 @@ async function handleLogin(event) {
     currentUser = data.user;
 
     renderUserNavbar();
-    showDashboard();
+    window.location.href = 'scans.html';
   } catch (err) {
     alert(`Erreur : ${err.message}`);
   }
 }
 
 /**
- * Register Submit Handler
+ * Register Submit Handler (Uses secureFetch with CSRF Token)
  */
 async function handleRegister(event) {
   event.preventDefault();
@@ -168,7 +129,7 @@ async function handleRegister(event) {
   const password = document.getElementById('regPassword').value;
 
   try {
-    const res = await fetch('/api/v1/auth/register', {
+    const res = await secureFetch('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -183,7 +144,7 @@ async function handleRegister(event) {
     currentUser = data.user;
 
     renderUserNavbar();
-    showDashboard();
+    window.location.href = 'scans.html';
   } catch (err) {
     alert(`Erreur : ${err.message}`);
   }
@@ -197,7 +158,7 @@ function logout() {
   currentUser = null;
   localStorage.removeItem('eocheck_token');
   renderUserNavbar();
-  showAuthSection();
+  window.location.href = 'login.html';
 }
 
 /**
@@ -205,6 +166,8 @@ function logout() {
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
+  if (!tbody) return;
+
   try {
     const res = await fetch('/api/v1/scans', {
       headers: { 'Authorization': `Bearer ${authToken}` }
@@ -233,7 +196,7 @@ async function loadScans() {
 }
 
 /**
- * Handle Create Scan Submission
+ * Handle Create Scan Submission (Uses secureFetch with CSRF Token)
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -245,7 +208,7 @@ async function handleCreateScan(event) {
   const inspectTrackers = document.getElementById('scanTrackers').checked;
 
   try {
-    const res = await fetch('/api/v1/scans', {
+    const res = await secureFetch('/api/v1/scans', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -272,6 +235,8 @@ async function handleCreateScan(event) {
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
+  if (!modalContent) return;
+
   modalContent.innerHTML = `<p style="text-align:center; color: var(--text-muted);">Chargement du rapport de scan...</p>`;
   openModal('scanResultModal');
 
@@ -332,6 +297,8 @@ async function viewScanDetails(scanId) {
  */
 async function loadTokens() {
   const tbody = document.getElementById('tokensTableBody');
+  if (!tbody) return;
+
   try {
     const res = await fetch('/api/v1/tokens', {
       headers: { 'Authorization': `Bearer ${authToken}` }
@@ -361,13 +328,13 @@ async function loadTokens() {
 }
 
 /**
- * Revoke API Token
+ * Revoke API Token (Uses secureFetch with CSRF Token)
  */
 async function revokeToken(tokenId) {
   if (!confirm('Êtes-vous sûr de vouloir révoquer cette clé API ?')) return;
 
   try {
-    const res = await fetch(`/api/v1/tokens/${tokenId}`, {
+    const res = await secureFetch(`/api/v1/tokens/${tokenId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
@@ -384,6 +351,8 @@ async function revokeToken(tokenId) {
  */
 async function loadAdminUsers() {
   const tbody = document.getElementById('usersTableBody');
+  if (!tbody) return;
+
   try {
     const res = await fetch('/api/v1/admin/users', {
       headers: { 'Authorization': `Bearer ${authToken}` }
@@ -410,13 +379,13 @@ async function loadAdminUsers() {
 }
 
 /**
- * Admin: Delete User
+ * Admin: Delete User (Uses secureFetch with CSRF Token)
  */
 async function deleteUser(userId) {
   if (!confirm('Supprimer cet utilisateur et ses accès ?')) return;
 
   try {
-    const res = await fetch(`/api/v1/admin/users/${userId}`, {
+    const res = await secureFetch(`/api/v1/admin/users/${userId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
@@ -429,7 +398,7 @@ async function deleteUser(userId) {
 }
 
 /**
- * Handle Create Token Modal Submit
+ * Handle Create Token Modal Submit (Uses secureFetch with CSRF Token)
  */
 async function handleCreateToken(event) {
   event.preventDefault();
@@ -438,12 +407,12 @@ async function handleCreateToken(event) {
   const expiresDaysVal = document.getElementById('tokenExpiresDays').value;
   const targetUserId = document.getElementById('tokenUserSelect').value;
 
-  const endpoint = (targetUserId && currentUser.role === 'admin')
+  const endpoint = (targetUserId && currentUser && currentUser.role === 'admin')
     ? `/api/v1/admin/users/${targetUserId}/tokens`
     : `/api/v1/tokens`;
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await secureFetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -465,7 +434,7 @@ async function handleCreateToken(event) {
     openModal('showKeyModal');
 
     loadTokens();
-    if (currentUser.role === 'admin') loadAdminUsers();
+    if (currentUser && currentUser.role === 'admin') loadAdminUsers();
   } catch (err) {
     alert(`Erreur : ${err.message}`);
   }
@@ -482,7 +451,7 @@ function copyRawToken() {
 }
 
 /**
- * Admin: Handle Create User / Admin Submit
+ * Admin: Handle Create User / Admin Submit (Uses secureFetch with CSRF Token)
  */
 async function handleCreateUserAdmin(event) {
   event.preventDefault();
@@ -491,7 +460,7 @@ async function handleCreateUserAdmin(event) {
   const role = document.getElementById('newRole').value;
 
   try {
-    const res = await fetch('/api/v1/admin/users', {
+    const res = await secureFetch('/api/v1/admin/users', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -515,11 +484,13 @@ async function handleCreateUserAdmin(event) {
  * Modal Helpers
  */
 function openModal(id) {
-  document.getElementById(id).classList.add('active');
+  const modal = document.getElementById(id);
+  if (modal) modal.classList.add('active');
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
+  const modal = document.getElementById(id);
+  if (modal) modal.classList.remove('active');
 }
 
 function openCreateUserModal() {
@@ -527,15 +498,18 @@ function openCreateUserModal() {
 }
 
 function openCreateTokenModal() {
-  document.getElementById('userSelectGroup').style.display = 'none';
-  document.getElementById('tokenUserSelect').value = '';
+  const userGroup = document.getElementById('userSelectGroup');
+  if (userGroup) userGroup.style.display = 'none';
+  const select = document.getElementById('tokenUserSelect');
+  if (select) select.value = '';
   openModal('createTokenModal');
 }
 
 function openAllocateTokenModal(userId, userEmail) {
   const select = document.getElementById('tokenUserSelect');
-  select.innerHTML = `<option value="${userId}" selected>${escapeHtml(userEmail)}</option>`;
-  document.getElementById('userSelectGroup').style.display = 'block';
+  if (select) select.innerHTML = `<option value="${userId}" selected>${escapeHtml(userEmail)}</option>`;
+  const userGroup = document.getElementById('userSelectGroup');
+  if (userGroup) userGroup.style.display = 'block';
   openModal('createTokenModal');
 }
 

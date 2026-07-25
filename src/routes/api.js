@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
+import { getCsrfToken, verifyCsrfToken } from '../middleware/csrf.js';
 import { register, login, getMe } from '../controllers/authController.js';
 import { createToken, listTokens, revokeToken } from '../controllers/tokenController.js';
 import { createScan, getScan, listScans } from '../controllers/scanController.js';
@@ -16,6 +17,12 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Endpoint to obtain fresh CSRF token
+router.get('/csrf-token', getCsrfToken);
+
+// Apply CSRF Token verification to all state-modifying POST/PUT/DELETE API calls
+router.use(verifyCsrfToken);
 
 // Auth Routes
 router.post('/auth/register', register);
