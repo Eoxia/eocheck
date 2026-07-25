@@ -322,7 +322,7 @@ function openImageLightbox(imgSrc, title) {
 }
 
 /**
- * Load & Render Scans List
+ * Load & Render Scans List (Separated Scan Détaillé & Actions Columns)
  */
 async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
@@ -338,7 +338,7 @@ async function loadScans() {
     const data = await parseJsonResponse(res);
 
     if (!data.scans || data.scans.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-dim);">Aucun scan enregistré.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-dim);">Aucun scan enregistré.</td></tr>`;
       if (pollingBadge) pollingBadge.style.display = 'none';
       return;
     }
@@ -367,10 +367,10 @@ async function loadScans() {
           <td style="color: var(--text-muted); font-size: 0.85rem;">${scan.completed_at ? formatDate(scan.completed_at) : 'En cours...'}</td>
           <td style="font-weight: 600; color: var(--accent-cyan); font-size: 0.85rem;">${formatDuration(scan.created_at, scan.completed_at)}</td>
           <td>
-            <div style="display: flex; gap: 0.4rem; align-items: center;">
-              <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
-              <button class="btn btn-primary btn-sm" onclick="rescanTarget('${escapeHtml(scan.target_url)}')">🔄 Relancer</button>
-            </div>
+            <button class="btn btn-secondary btn-sm" onclick="viewScanDetails('${scan.id}')">🔍 Scan Détaillé</button>
+          </td>
+          <td>
+            <button class="btn btn-primary btn-sm" onclick="rescanTarget('${escapeHtml(scan.target_url)}')">🔄 Relancer</button>
           </td>
         </tr>
       `;
@@ -387,7 +387,7 @@ async function loadScans() {
     }
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -428,7 +428,7 @@ async function handleCreateScan(event) {
 }
 
 /**
- * View Detailed Scan Result Modal (With Lightbox-enabled Screenshots Gallery)
+ * View Detailed Scan Result Modal
  */
 async function viewScanDetails(scanId) {
   const modalContent = document.getElementById('scanModalContent');
