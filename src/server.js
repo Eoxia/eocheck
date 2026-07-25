@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import apiRouter from './routes/api.js';
@@ -25,6 +26,13 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static frontend files from public/
 const publicDir = path.resolve(process.cwd(), 'public');
 app.use(express.static(publicDir));
+
+// Serve static screenshots & outputs directory from outputs/
+const outputsDir = path.resolve(process.cwd(), 'outputs');
+if (!fs.existsSync(outputsDir)) {
+  fs.mkdirSync(outputsDir, { recursive: true });
+}
+app.use('/outputs', express.static(outputsDir));
 
 // Rate limiting for API endpoints
 const apiLimiter = rateLimit({

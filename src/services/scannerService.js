@@ -8,8 +8,12 @@ const __dirname = path.dirname(__filename);
 
 // Ensure outputs directory exists
 const outputsDir = path.resolve(process.cwd(), 'outputs');
+const screenshotsBaseDir = path.join(outputsDir, 'screenshots');
 if (!fs.existsSync(outputsDir)) {
   fs.mkdirSync(outputsDir, { recursive: true });
+}
+if (!fs.existsSync(screenshotsBaseDir)) {
+  fs.mkdirSync(screenshotsBaseDir, { recursive: true });
 }
 
 /**
@@ -44,9 +48,9 @@ function findChromeExecutable() {
 }
 
 /**
- * Attempt real website screenshot capture using Puppeteer
+ * Capture real website page screenshot with Puppeteer and save as physical JPEG file in outputs/screenshots/SCAN_ID/
  */
-async function captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless = true, timeoutMs = 30000) {
+async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadless = true, timeoutMs = 30000) {
   try {
     const puppeteer = await import('puppeteer');
     const executablePath = findChromeExecutable();
@@ -60,7 +64,6 @@ async function captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless = true
     }
 
     const browser = await puppeteer.default.launch(launchOpts);
-
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -68,13 +71,26 @@ async function captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless = true
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 800)));
 
-    const screenshotBase64 = await page.screenshot({ type: 'jpeg', quality: 75, encoding: 'base64' });
+    // Create physical directory outputs/screenshots/SCAN_ID/
+    const scanOutputDir = path.join(screenshotsBaseDir, scanId);
+    if (!fs.existsSync(scanOutputDir)) {
+      fs.mkdirSync(scanOutputDir, { recursive: true });
+    }
+
+    const imageFilename = `page_${pageIndex + 1}.jpg`;
+    const imageFilePath = path.join(scanOutputDir, imageFilename);
+
+    // Save physical JPEG image file to disk
+    await page.screenshot({ path: imageFilePath, type: 'jpeg', quality: 80 });
     await browser.close();
 
-    return `data:image/jpeg;base64,${screenshotBase64}`;
+    console.log(`[Scanner Service] Saved physical screenshot file: ${imageFilePath}`);
+
+    // Return relative web URL path for frontend rendering & DB storage
+    return `outputs/screenshots/${scanId}/${imageFilename}`;
   } catch (err) {
-    console.warn(`[Puppeteer Screenshot Notice] ${err.message}. Using live web screenshot fallback...`);
-    return null;
+    console.warn(`[Puppeteer Screenshot Notice] Could not capture screenshot for ${pageUrl}: ${err.message}. Using live web screenshot fallback...`);
+    return getRealWebsiteScreenshotUrl(pageUrl);
   }
 }
 
@@ -86,7 +102,7 @@ function getRealWebsiteScreenshotUrl(pageUrl) {
 }
 
 /**
- * Queue and execute a site scan with interactive progress tracking & real website screenshots
+ * Queue and execute a site scan with interactive progress tracking & physical image storage
  */
 export async function runScanJob(scanId, targetUrl, options = {}) {
   try {
@@ -94,7 +110,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
     db.prepare('UPDATE scans SET status = ? WHERE id = ?').run('processing', scanId);
     updateScanProgress(scanId, 15, 'Initialisation du navigateur et du scanner...');
 
-    console.log(`[Scanner Service] Starting scan ${scanId} for URL: ${targetUrl} with options:`, options);
+    console.log(`[Scanner Service] Starting scan job ${scanId} for URL: ${targetUrl} with options:`, options);
 
     let parsedUrl;
     try {
@@ -196,8 +212,8 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
         scannedUrls.push(`${parsedUrl.origin}${sampleInnerPaths[i]}`);
       }
 
-      // Stage 4: Screenshots Generation (90%)
-      updateScanProgress(scanId, 90, "Génération des vraies captures d'écran du site...");
+      // Stage 4: Screenshots Generation & Physical Disk Storage (90%)
+      updateScanProgress(scanId, 90, "Génération des captures d'écran et enregistrement dans C:\\wamp64\\www\\eocheck\\outputs...");
 
       const screenshots = [];
       if (takeScreenshots) {
@@ -205,19 +221,14 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           const pageUrl = scannedUrls[idx];
           const pageTitle = idx === 0 ? "Page d'accueil (Accueil)" : `Page secondaire #${idx} (${new URL(pageUrl).pathname})`;
 
-          // Try real Puppeteer screenshot first
-          let realImgSrc = await captureRealPageScreenshotWithPuppeteer(pageUrl, isHeadless, timeoutMs);
-          
-          // Fallback to live screenshot renderer URL
-          if (!realImgSrc) {
-            realImgSrc = getRealWebsiteScreenshotUrl(pageUrl);
-          }
+          // Save physical JPEG image file into outputs/screenshots/SCAN_ID/
+          const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs);
 
           screenshots.push({
             url: pageUrl,
             title: pageTitle,
             status: httpStatus || 200,
-            preview: realImgSrc
+            preview: imageWebPath
           });
         }
       }
@@ -265,7 +276,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
        WHERE id = ?`
     ).run('completed', JSON.stringify(scanResult), 'Scan terminé avec succès', scanId);
 
-    console.log(`[Scanner Service] Scan ${scanId} completed successfully.`);
+    console.log(`[Scanner Service] Scan ${scanId} completed successfully with physical files in outputs/screenshots/${scanId}.`);
     return scanResult;
   } catch (error) {
     console.error(`[Scanner Service] Scan ${scanId} failed:`, error);
