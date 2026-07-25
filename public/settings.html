@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Réglages Général & Sécurité</title>
+  <meta name="description" content="Gestion des utilisateurs, des paramètres de scan, du filtrage d'IP et des logs de connexion">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="users.html" class="nav-tab">🔑 Clés API</a>
+      <a href="settings.html" class="nav-tab active">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+
+    <!-- Settings Sub-Navigation Tabs -->
+    <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem;">
+      <button class="btn btn-secondary" id="btnTabUsers" onclick="switchSettingsTab('settingsUsersTab')">👥 Utilisateurs</button>
+      <button class="btn btn-secondary" id="btnTabScanParams" onclick="switchSettingsTab('settingsScanTab')">🎛️ Paramètres des Scans</button>
+      <button class="btn btn-secondary" id="btnTabSecurity" onclick="switchSettingsTab('settingsSecurityTab')">🔒 Sécurité & IP</button>
+    </div>
+
+    <!-- SETTINGS TAB 1: Utilisateurs -->
+    <div id="settingsUsersTab" class="card">
+      <div class="card-title" style="justify-content: space-between;">
+        <span>👥 Liste des Utilisateurs & Administrateurs</span>
+        <button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">➕ Nouveau Compte / Admin</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID Utilisateur</th>
+              <th>Nom & Prénom</th>
+              <th>E-mail</th>
+              <th>Rôle</th>
+              <th>Clés API</th>
+              <th>Créé le</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="settingsUsersTableBody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-dim);">Chargement des utilisateurs...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SETTINGS TAB 2: Paramètres des Scans -->
+    <div id="settingsScanTab" class="card" style="display: none;">
+      <div class="card-title">
+        <span>🎛️ Configuration des Scans par Défaut</span>
+      </div>
+
+      <form onsubmit="handleSaveScanSettings(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="settingTimeout">Timeout par défaut (secondes)</label>
+            <input type="number" id="settingTimeout" class="form-control" value="60" min="10" max="180">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="settingNumPages">Pages secondaires à crawler par défaut</label>
+            <input type="number" id="settingNumPages" class="form-control" value="0" min="0" max="10">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="settingMaxConcurrent">Scans simultanés maximaux</label>
+            <input type="number" id="settingMaxConcurrent" class="form-control" value="3" min="1" max="10">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-group">
+            <input type="checkbox" id="settingHeadless" checked> Mode Headless activé par défaut (masquer le navigateur)
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">💾 Enregistrer la Configuration des Scans</button>
+      </form>
+    </div>
+
+    <!-- SETTINGS TAB 3: Sécurité, IP & Logs de Connexion -->
+    <div id="settingsSecurityTab" class="card" style="display: none;">
+      <div class="card-title">
+        <span>🔒 Sécurité, Filtrage IP & Logs d'Accès</span>
+      </div>
+
+      <!-- IP Lists Section -->
+      <div class="form-row" style="margin-bottom: 2rem;">
+        <div>
+          <h4 style="color: var(--accent-emerald); font-size: 0.95rem; margin-bottom: 0.5rem;">🟢 IP Autorisées (Whitelist)</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Si renseigné, seules ces adresses IP pourront se connecter à l'API.</p>
+          <textarea id="ipWhitelistText" class="form-control" rows="4" placeholder="127.0.0.1&#10;192.168.1.50"></textarea>
+        </div>
+
+        <div>
+          <h4 style="color: var(--accent-rose); font-size: 0.95rem; margin-bottom: 0.5rem;">🔴 IP Bannies (Blacklist)</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Les requêtes provenant de ces adresses IP seront immédiatement bloquées.</p>
+          <textarea id="ipBlacklistText" class="form-control" rows="4" placeholder="203.0.113.195"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 2rem;">
+        <button class="btn btn-primary" onclick="handleSaveIpSettings()">💾 Enregistrer les Listes d'IP</button>
+      </div>
+
+      <!-- Login Audit Trail Table -->
+      <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h4 style="font-size: 1.1rem; color: #fff;">📜 Logs des Dernières Connexions (Audit Trail)</h4>
+          <button class="btn btn-secondary btn-sm" onclick="loadLoginLogs()">🔄 Actualiser les Logs</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Date & Heure</th>
+                <th>Adresse IP</th>
+                <th>ID Utilisateur</th>
+                <th>Nom & Prénom</th>
+                <th>E-mail</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody id="loginLogsTableBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-dim);">Chargement des logs de connexion...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: Create User / Admin Account -->
+  <div id="createUserModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Créer un Nouveau Compte</h3>
+        <button class="close-btn" onclick="closeModal('createUserModal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateUserAdmin(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="newFirstName">Prénom</label>
+            <input type="text" id="newFirstName" class="form-control" placeholder="Jean">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newLastName">Nom</label>
+            <input type="text" id="newLastName" class="form-control" placeholder="Dupont">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newEmail">Adresse E-mail</label>
+          <input type="email" id="newEmail" class="form-control" required placeholder="user@eoxia.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPassword">Mot de passe</label>
+          <input type="password" id="newPassword" class="form-control" required placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newRole">Rôle du compte</label>
+          <select id="newRole" class="form-control">
+            <option value="user">Utilisateur Standard (User)</option>
+            <option value="admin">Administrateur (Admin)</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Créer le compte</button>
+      </form>
+    </div>
+  </div>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      switchSettingsTab('settingsUsersTab');
+    });
+  </script>
+</body>
+</html>
