@@ -16,15 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 async function fetchProfile() {
   try {
-    const res = await fetch('/api/v1/auth/me', {
+    const apiUrl = getApiUrl('/api/v1/auth/me');
+    const res = await fetch(apiUrl, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
 
     if (!res.ok) {
-      throw new Error('Session expired');
+      throw new Error('Session expirée');
     }
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     currentUser = data.user;
 
     renderUserNavbar();
@@ -51,7 +52,6 @@ function renderUserNavbar() {
       `;
     }
 
-    // Show Admin user section if present on current page
     const adminUserSection = document.getElementById('adminUserSection');
     if (adminUserSection) {
       if (currentUser.role === 'admin') {
@@ -92,7 +92,7 @@ function toggleAuthMode(event) {
 }
 
 /**
- * Login Submit Handler (Uses secureFetch with CSRF Token)
+ * Login Submit Handler
  */
 async function handleLogin(event) {
   event.preventDefault();
@@ -106,7 +106,7 @@ async function handleLogin(event) {
       body: JSON.stringify({ email, password })
     });
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur de connexion');
 
     authToken = data.token;
@@ -121,7 +121,7 @@ async function handleLogin(event) {
 }
 
 /**
- * Register Submit Handler (Uses secureFetch with CSRF Token)
+ * Register Submit Handler
  */
 async function handleRegister(event) {
   event.preventDefault();
@@ -135,7 +135,7 @@ async function handleRegister(event) {
       body: JSON.stringify({ email, password })
     });
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || "Erreur lors de l'inscription");
 
     alert(`Compte créé avec succès ! (${data.user.role})`);
@@ -169,10 +169,12 @@ async function loadScans() {
   if (!tbody) return;
 
   try {
-    const res = await fetch('/api/v1/scans', {
+    const apiUrl = getApiUrl('/api/v1/scans');
+    const res = await fetch(apiUrl, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
-    const data = await res.json();
+
+    const data = await parseJsonResponse(res);
 
     if (!data.scans || data.scans.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-dim);">Aucun scan enregistré.</td></tr>`;
@@ -191,12 +193,12 @@ async function loadScans() {
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--accent-rose);">Erreur de chargement des scans.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
 /**
- * Handle Create Scan Submission (Uses secureFetch with CSRF Token)
+ * Handle Create Scan Submission
  */
 async function handleCreateScan(event) {
   event.preventDefault();
@@ -220,7 +222,7 @@ async function handleCreateScan(event) {
       })
     });
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors du lancement du scan');
 
     alert(`Scan lancé avec succès ! (ID: ${data.scan_id})`);
@@ -241,8 +243,9 @@ async function viewScanDetails(scanId) {
   openModal('scanResultModal');
 
   try {
-    const res = await fetch(`/api/v1/scans/${scanId}`);
-    const scan = await res.json();
+    const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
+    const res = await fetch(apiUrl);
+    const scan = await parseJsonResponse(res);
 
     const result = scan.result || {};
     const privacy = result.privacy_inspection || {};
@@ -288,7 +291,7 @@ async function viewScanDetails(scanId) {
       <pre class="json-viewer">${escapeHtml(JSON.stringify(scan, null, 2))}</pre>
     `;
   } catch (err) {
-    modalContent.innerHTML = `<p style="color: var(--accent-rose);">Erreur lors de la récupération des détails.</p>`;
+    modalContent.innerHTML = `<p style="color: var(--accent-rose);">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -300,10 +303,11 @@ async function loadTokens() {
   if (!tbody) return;
 
   try {
-    const res = await fetch('/api/v1/tokens', {
+    const apiUrl = getApiUrl('/api/v1/tokens');
+    const res = await fetch(apiUrl, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
 
     if (!data.tokens || data.tokens.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-dim);">Aucune clé API active.</td></tr>`;
@@ -323,12 +327,12 @@ async function loadTokens() {
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-rose);">Erreur de chargement des clés API.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-rose);">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
 /**
- * Revoke API Token (Uses secureFetch with CSRF Token)
+ * Revoke API Token
  */
 async function revokeToken(tokenId) {
   if (!confirm('Êtes-vous sûr de vouloir révoquer cette clé API ?')) return;
@@ -347,17 +351,18 @@ async function revokeToken(tokenId) {
 }
 
 /**
- * Load Admin Users (Admin only)
+ * Load Admin Users
  */
 async function loadAdminUsers() {
   const tbody = document.getElementById('usersTableBody');
   if (!tbody) return;
 
   try {
-    const res = await fetch('/api/v1/admin/users', {
+    const apiUrl = getApiUrl('/api/v1/admin/users');
+    const res = await fetch(apiUrl, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
 
     if (!data.users) return;
 
@@ -379,7 +384,7 @@ async function loadAdminUsers() {
 }
 
 /**
- * Admin: Delete User (Uses secureFetch with CSRF Token)
+ * Admin: Delete User
  */
 async function deleteUser(userId) {
   if (!confirm('Supprimer cet utilisateur et ses accès ?')) return;
@@ -398,7 +403,7 @@ async function deleteUser(userId) {
 }
 
 /**
- * Handle Create Token Modal Submit (Uses secureFetch with CSRF Token)
+ * Handle Create Token Modal Submit
  */
 async function handleCreateToken(event) {
   event.preventDefault();
@@ -425,7 +430,7 @@ async function handleCreateToken(event) {
       })
     });
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur de génération');
 
     closeModal('createTokenModal');
@@ -451,7 +456,7 @@ function copyRawToken() {
 }
 
 /**
- * Admin: Handle Create User / Admin Submit (Uses secureFetch with CSRF Token)
+ * Admin: Handle Create User / Admin Submit
  */
 async function handleCreateUserAdmin(event) {
   event.preventDefault();
@@ -469,7 +474,7 @@ async function handleCreateUserAdmin(event) {
       body: JSON.stringify({ email, password, role })
     });
 
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) throw new Error(data.message || 'Erreur lors de la création');
 
     alert(`Compte créé avec succès (${data.user.role}) !`);
