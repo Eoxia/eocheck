@@ -39,6 +39,13 @@ export async function register(req, res) {
       last_name
     );
 
+    // Assign to default group
+    const defaultGroupName = isFirstUser ? 'Administrateurs' : 'Utilisateurs standards';
+    const group = db.prepare('SELECT id FROM user_groups WHERE name = ?').get(defaultGroupName);
+    if (group) {
+      db.prepare('INSERT INTO user_group_memberships (user_id, group_id) VALUES (?, ?)').run(userId, group.id);
+    }
+
     const clientIp = getClientIp(req);
     const userAgent = req.headers['user-agent'] || '';
 
@@ -51,13 +58,13 @@ export async function register(req, res) {
     const token = jwt.sign({ id: userId, email, role: userRole, first_name, last_name }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     return res.status(201).json({
-      message: `User registered successfully as ${userRole}`,
+      message: `Inscription réussie en tant que ${userRole}`,
       user: { id: userId, email, role: userRole, first_name, last_name },
       token
     });
   } catch (error) {
     console.error('[Auth Controller] Registration error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to register user' });
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Échec de la création du compte' });
   }
 }
 
@@ -83,7 +90,7 @@ export async function login(req, res) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(uuidv4(), null, email, '', '', clientIp, userAgent, 'failure');
 
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Unauthorized', message: 'Email ou mot de passe incorrect' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -94,7 +101,7 @@ export async function login(req, res) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(uuidv4(), user.id, email, user.first_name || '', user.last_name || '', clientIp, userAgent, 'failure');
 
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Unauthorized', message: 'Email ou mot de passe incorrect' });
     }
 
     // Record successful login audit entry with IP, ID, Nom, Prénom, Email
@@ -110,13 +117,13 @@ export async function login(req, res) {
     );
 
     return res.json({
-      message: 'Login successful',
+      message: 'Connexion réussie',
       user: { id: user.id, email: user.email, role: user.role, first_name: user.first_name, last_name: user.last_name },
       token
     });
   } catch (error) {
     console.error('[Auth Controller] Login error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to login' });
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Échec de la connexion au serveur' });
   }
 }
 
@@ -129,6 +136,28 @@ export function getMe(req, res) {
     if (!user) {
       return res.status(404).json({ error: 'Not Found', message: 'User not found' });
     }
+    // Inclure les permissions qui ont été chargées par le middleware auth
+    user.permissions = req.user.permissions || [];
+    // Récupérer les limites maximales selon les groupes de l'utilisateur
+    const groupLimits = db.prepare(`
+      SELECT 
+        MAX(g.max_pages) as max_pages, 
+        MAX(g.max_timeout) as max_timeout,
+        MAX(g.max_concurrent) as max_concurrent,
+        MAX(g.max_depth) as max_depth
+      FROM user_groups g
+      JOIN user_group_memberships m ON g.id = m.group_id
+      WHERE m.user_id = ?
+    `).get(req.user.id);
+
+    // Fallback if user is in no groups
+    user.limits = {
+      max_pages: groupLimits && groupLimits.max_pages !== null ? groupLimits.max_pages : 0,
+      max_timeout: groupLimits && groupLimits.max_timeout !== null ? groupLimits.max_timeout : 60,
+      max_concurrent: groupLimits && groupLimits.max_concurrent !== null ? groupLimits.max_concurrent : 1,
+      max_depth: groupLimits && groupLimits.max_depth !== null ? groupLimits.max_depth : 3
+    };
+
     return res.json({ user });
   } catch (error) {
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch user profile' });

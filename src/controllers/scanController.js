@@ -1,5 +1,29 @@
 import { db } from '../db/index.js';
-import { runScanJob } from '../services/scannerService.js';
+import { runScanJob, generateScanReportPdf } from '../services/scannerService.js';
+
+export async function downloadScanPdf(req, res) {
+  try {
+    const { id } = req.params;
+    // Extract token from either headers or query string
+    let token = req.query.token;
+    if (!token && req.headers.authorization) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    
+    if (!token) {
+      return res.status(401).send('Token required for PDF generation');
+    }
+
+    const pdfBuffer = await generateScanReportPdf(id, token);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="EOCheck_Report_${id}.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
+  } catch (error) {
+    console.error('[Scan Controller] PDF generation failed:', error);
+    res.status(500).send('Erreur lors de la génération du PDF');
+  }
+}
 
 /**
  * Generate formatted custom scan ID: url-AAAMMJJHHMMSS-0001
@@ -47,8 +71,37 @@ export function createScan(req, res) {
       return res.status(400).json({ error: 'Bad Request', message: 'Invalid URL format. Provide a full URL (e.g., https://example.com)' });
     }
 
-    const scanId = generateFormattedScanId(url);
     const userId = req.user ? req.user.id : null;
+    
+    // Calculate user limits
+    let maxTimeout = 60;
+    let maxPages = 0;
+    let maxDepth = 3;
+    
+    if (userId) {
+      const groupLimits = db.prepare(`
+        SELECT 
+          MAX(g.max_pages) as max_pages, 
+          MAX(g.max_timeout) as max_timeout,
+          MAX(g.max_depth) as max_depth
+        FROM user_groups g
+        JOIN user_group_memberships m ON g.id = m.group_id
+        WHERE m.user_id = ?
+      `).get(userId);
+      
+      if (groupLimits) {
+        if (groupLimits.max_pages !== null) maxPages = groupLimits.max_pages;
+        if (groupLimits.max_timeout !== null) maxTimeout = groupLimits.max_timeout;
+        if (groupLimits.max_depth !== null) maxDepth = groupLimits.max_depth;
+      }
+    }
+    
+    // Apply strict server-side limits from RBAC
+    options.numPages = Math.min(parseInt(options.numPages || 0, 10), maxPages);
+    options.timeout = Math.min(parseInt(options.timeout || 60, 10), maxTimeout);
+    options.depth = Math.min(parseInt(options.depth || 3, 10), maxDepth);
+
+    const scanId = generateFormattedScanId(url);
 
     db.prepare(
       `INSERT INTO scans (id, user_id, target_url, status, options_json, progress_percent, progress_step) 
@@ -134,5 +187,26 @@ export function listScans(req, res) {
   } catch (error) {
     console.error('[Scan Controller] List scans error:', error);
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to list scans' });
+  }
+}
+
+/**
+ * Get live logs for active scans
+ */
+export function getActiveScanLogs(req, res) {
+  try {
+    const logs = db.prepare(`
+      SELECT l.scan_id, l.message, l.created_at, s.target_url
+      FROM scan_logs l
+      JOIN scans s ON l.scan_id = s.id
+      WHERE s.status IN ('PENDING', 'RUNNING', 'processing')
+      ORDER BY l.id DESC
+      LIMIT 100
+    `).all();
+    
+    return res.json({ logs: logs.reverse() });
+  } catch (error) {
+    console.error('[Scan Controller] Failed to fetch live logs:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 }

@@ -34,18 +34,18 @@ if (!fs.existsSync(outputsDir)) {
 }
 app.use('/outputs', express.static(outputsDir));
 
-// Rate limiting for API endpoints
+// Limitation du taux pour les points de terminaison de l'API
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // Limit each IP to 150 requests per windowMs
+  max: 150, // Limiter chaque IP à 150 requêtes par windowMs
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too Many Requests', message: 'Rate limit exceeded. Please try again later.' }
+  message: { error: 'Trop de requêtes', message: 'Limite de requêtes dépassée. Veuillez réessayer plus tard.' }
 });
 
 app.use('/api/', apiLimiter);
 
-// Bind API routes
+// Associer les routes de l'API
 app.use('/api/v1', apiRouter);
 
 // Serve index.html for root navigation

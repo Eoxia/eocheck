@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchProfile();
   } else {
     renderUserNavbar();
+    applyPermissionsUI();
   }
 });
 
@@ -75,9 +76,60 @@ async function fetchProfile() {
     currentUser = data.user;
 
     renderUserNavbar();
+    applyPermissionsUI();
+    checkPageAccess(); // Vérifier si l'utilisateur a le droit d'être sur la page actuelle
   } catch (err) {
-    console.warn('Authentication check failed:', err.message);
+    const errorMsg = err.message === 'Failed to fetch' ? 'Impossible de joindre le serveur API. Vérifiez que le serveur Node.js est bien démarré.' : err.message;
+    console.warn('Authentication check failed:', errorMsg);
     logout();
+  }
+}
+
+/**
+ * RBAC Helper: Vérifier si l'utilisateur a une permission spécifique
+ */
+function hasPermission(perm) {
+  if (!currentUser || !currentUser.permissions) return false;
+  return currentUser.permissions.includes(perm) || currentUser.permissions.includes('*');
+}
+
+/**
+ * RBAC Helper: Appliquer les restrictions d'UI basées sur les data-permission
+ */
+function applyPermissionsUI() {
+  document.querySelectorAll('[data-permission]').forEach(el => {
+    const perm = el.getAttribute('data-permission');
+    if (!hasPermission(perm)) {
+      el.style.display = 'none';
+      // Désactiver aussi les inputs au cas où
+      if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+        el.disabled = true;
+      }
+    } else {
+      el.style.display = ''; // Restaurer l'affichage par défaut
+      if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+        el.disabled = false;
+      }
+    }
+  });
+}
+
+/**
+ * RBAC Helper: Vérifier l'accès à la page courante
+ */
+function checkPageAccess() {
+  const page = window.location.pathname.split('/').pop();
+  let requiredPerm = null;
+
+  if (page === 'scans.html') requiredPerm = 'page:scans';
+  if (page === 'settings.html') requiredPerm = 'page:settings';
+  if (page === 'users.html') requiredPerm = 'page:users';
+  if (page === 'groups.html') requiredPerm = 'page:groups';
+  if (page === 'system.html') requiredPerm = 'page:system';
+
+  if (requiredPerm && !hasPermission(requiredPerm)) {
+    showToast('Accès interdit à cette page', 'error');
+    setTimeout(() => { window.location.href = 'index.html'; }, 1000);
   }
 }
 
@@ -201,7 +253,8 @@ async function handleLogin(event) {
     renderUserNavbar();
     setTimeout(() => { window.location.href = 'scans.html'; }, 500);
   } catch (err) {
-    showToast(err.message, 'error');
+    const errorMsg = err.message === 'Failed to fetch' ? 'Impossible de joindre le serveur API. Vérifiez que le serveur Node.js est bien démarré.' : err.message;
+    showToast(errorMsg, 'error');
   }
 }
 
@@ -271,8 +324,14 @@ async function rescanTargetByScanId(scanId) {
 
     if (!originalScan) {
       const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
-      const detailRes = await fetch(apiUrl);
+      const detailRes = await fetch(apiUrl, {
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+      });
       originalScan = await parseJsonResponse(detailRes);
+      
+      if (originalScan.error) {
+        throw new Error(originalScan.message || 'Erreur lors de la récupération');
+      }
     }
 
     if (!originalScan || !originalScan.target_url) {
@@ -326,7 +385,8 @@ function openImageLightbox(imgSrc, title) {
   }
 
   document.getElementById('lightboxTitle').textContent = title || 'Aperçu de la capture d\'écran';
-  document.getElementById('lightboxImg').src = imgSrc;
+  const finalImgSrc = imgSrc.startsWith('http') ? imgSrc : getApiUrl('/' + imgSrc).replace('/api/v1/', '/');
+  document.getElementById('lightboxImg').src = finalImgSrc;
   openModal('imageLightboxModal');
 }
 
@@ -337,6 +397,31 @@ async function loadScans() {
   const tbody = document.getElementById('scansTableBody');
   const pollingBadge = document.getElementById('livePollingBadge');
   if (!tbody) return;
+
+  // Apply Limits from Current User Profile
+  if (currentUser && currentUser.limits) {
+    const conf = currentUser.limits;
+    const pagesInput = document.getElementById('scanPages');
+    const maxPagesDisplay = document.getElementById('maxPagesDisplay');
+    if (pagesInput && conf.max_pages !== undefined) {
+      pagesInput.max = conf.max_pages;
+      if (maxPagesDisplay) maxPagesDisplay.textContent = `(Max: ${conf.max_pages})`;
+    }
+    
+    const timeoutInput = document.getElementById('scanTimeout');
+    const maxTimeoutDisplay = document.getElementById('maxTimeoutDisplay');
+    if (timeoutInput && conf.max_timeout !== undefined) {
+      timeoutInput.max = conf.max_timeout;
+      if (maxTimeoutDisplay) maxTimeoutDisplay.textContent = `(Max: ${conf.max_timeout}s)`;
+    }
+
+    const depthInput = document.getElementById('scanDepth');
+    const maxDepthDisplay = document.getElementById('maxDepthDisplay');
+    if (depthInput && conf.max_depth !== undefined) {
+      depthInput.max = conf.max_depth;
+      if (maxDepthDisplay) maxDepthDisplay.textContent = `(Max: ${conf.max_depth})`;
+    }
+  }
 
   try {
     const apiUrl = getApiUrl('/api/v1/scans');
@@ -395,7 +480,10 @@ async function loadScans() {
     if (hasActiveScans) {
       if (pollingBadge) pollingBadge.style.display = 'inline';
       if (scanPollingTimer) clearTimeout(scanPollingTimer);
-      scanPollingTimer = setTimeout(loadScans, 2000);
+      loadLiveLogs();
+      scanPollingTimer = setTimeout(() => {
+        loadScans();
+      }, 2000);
     } else {
       if (pollingBadge) pollingBadge.style.display = 'none';
       if (scanPollingTimer) clearTimeout(scanPollingTimer);
@@ -407,13 +495,50 @@ async function loadScans() {
 }
 
 /**
+ * Fetch and display live logs
+ */
+async function loadLiveLogs() {
+  const content = document.getElementById('liveLogsContent');
+  if (!content) return;
+
+  try {
+    const apiUrl = getApiUrl('/api/v1/scans/active/logs');
+    const res = await fetch(apiUrl, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    
+    if (res.ok) {
+      const data = await parseJsonResponse(res);
+      if (data.logs && data.logs.length > 0) {
+        content.innerHTML = data.logs.map(log => {
+          const time = new Date(log.created_at).toLocaleTimeString();
+          return `<div style="padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><span style="color: var(--text-dim);">[${time}]</span> <span style="color: var(--accent-emerald);">${escapeHtml(new URL(log.target_url).hostname)}:</span> ${escapeHtml(log.message)}</div>`;
+        }).join('');
+        content.scrollTop = content.scrollHeight;
+      } else {
+        content.innerHTML = `<div style="color: var(--text-muted); font-style: italic;">Aucun log récent à afficher...</div>`;
+      }
+    }
+  } catch(e) {
+    // Silent fail for polling
+  }
+}
+
+/**
  * Handle Create Scan Submission
  */
 async function handleCreateScan(event) {
   event.preventDefault();
+  
+  if (!hasPermission('scan:launch')) {
+    showToast('Vous n\'avez pas la permission de lancer un scan.', 'error');
+    return;
+  }
+
   const url = document.getElementById('scanUrl').value;
   const numPages = parseInt(document.getElementById('scanPages').value, 10);
   const timeout = parseInt(document.getElementById('scanTimeout').value, 10);
+  const depth = parseInt(document.getElementById('scanDepth').value, 10);
   const headless = document.getElementById('scanHeadless').checked;
   const inspectCookies = document.getElementById('scanCookies').checked;
   const inspectTrackers = document.getElementById('scanTrackers').checked;
@@ -428,7 +553,7 @@ async function handleCreateScan(event) {
       },
       body: JSON.stringify({
         url,
-        options: { numPages, timeout, headless, inspectCookies, inspectTrackers, takeScreenshots }
+        options: { numPages, timeout, depth, headless, inspectCookies, inspectTrackers, takeScreenshots }
       })
     });
 
@@ -454,8 +579,14 @@ async function viewScanDetails(scanId) {
 
   try {
     const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
-    const res = await fetch(apiUrl);
+    const res = await fetch(apiUrl, {
+      headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+    });
     const scan = await parseJsonResponse(res);
+
+    if (scan.error) {
+      throw new Error(scan.message || 'Erreur lors du chargement du scan');
+    }
 
     const result = scan.result || {};
     const opts = scan.options || {};
@@ -500,6 +631,8 @@ async function viewScanDetails(scanId) {
         <div style="font-size: 0.82rem; color: var(--text-main); display: flex; flex-wrap: wrap; gap: 1rem;">
           <span>📄 <b>Pages secondaires (crawl) :</b> ${opts.numPages !== undefined ? opts.numPages : 0}</span>
           <span>⏱️ <b>Timeout :</b> ${opts.timeout || 60}s</span>
+          <span>🕸️ <b>Profondeur :</b> ${opts.depth || 3}</span>
+          <span>🤖 <b>Méthode :</b> ${opts.scan_method || 'SITEMAP'}</span>
           <span>🕶️ <b>Headless :</b> ${opts.headless !== false ? 'Oui' : 'Non'}</span>
           <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
           <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
@@ -524,7 +657,7 @@ async function viewScanDetails(scanId) {
               <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                 <div style="font-size: 0.82rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
                 <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">${escapeHtml(s.url)}</div>
-                <img src="${s.preview}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
+                <img src="${s.preview.startsWith('http') ? s.preview : getApiUrl('/' + s.preview).replace('/api/v1/', '/')}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
               </div>
             `).join('')}
           </div>
@@ -569,11 +702,11 @@ async function loadSettings() {
     const data = await parseJsonResponse(res);
     const s = data.settings || {};
 
-    const timeoutInput = document.getElementById('settingTimeout');
-    if (timeoutInput && s.scanner_default_timeout) timeoutInput.value = s.scanner_default_timeout;
+    const timeoutInput = document.getElementById('settingMaxTimeout');
+    if (timeoutInput && s.scanner_max_timeout) timeoutInput.value = s.scanner_max_timeout;
 
-    const numPagesInput = document.getElementById('settingNumPages');
-    if (numPagesInput && s.scanner_default_num_pages) numPagesInput.value = s.scanner_default_num_pages;
+    const numPagesInput = document.getElementById('settingMaxPages');
+    if (numPagesInput && s.scanner_max_num_pages) numPagesInput.value = s.scanner_max_num_pages;
 
     const maxConcurrentInput = document.getElementById('settingMaxConcurrent');
     if (maxConcurrentInput && s.scanner_max_concurrent) maxConcurrentInput.value = s.scanner_max_concurrent;
@@ -596,8 +729,14 @@ async function loadSettings() {
  */
 async function handleSaveScanSettings(event) {
   event.preventDefault();
-  const timeout = parseInt(document.getElementById('settingTimeout').value, 10);
-  const numPages = parseInt(document.getElementById('settingNumPages').value, 10);
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const timeout = parseInt(document.getElementById('settingMaxTimeout').value, 10);
+  const numPages = parseInt(document.getElementById('settingMaxPages').value, 10);
   const maxConcurrent = parseInt(document.getElementById('settingMaxConcurrent').value, 10);
   const headless = document.getElementById('settingHeadless').checked;
 
@@ -610,8 +749,8 @@ async function handleSaveScanSettings(event) {
       },
       body: JSON.stringify({
         settings: {
-          scanner_default_timeout: timeout,
-          scanner_default_num_pages: numPages,
+          scanner_max_timeout: timeout,
+          scanner_max_num_pages: numPages,
           scanner_max_concurrent: maxConcurrent,
           scanner_default_headless: headless
         }
@@ -631,6 +770,11 @@ async function handleSaveScanSettings(event) {
  * Save IP Whitelist & Blacklist
  */
 async function handleSaveIpSettings() {
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
   const whitelistRaw = document.getElementById('ipWhitelistText').value;
   const blacklistRaw = document.getElementById('ipBlacklistText').value;
 

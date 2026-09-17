@@ -26,8 +26,21 @@ export function updateScanProgress(scanId, percent, stepMessage) {
       stepMessage,
       scanId
     );
+    // Also log this major step
+    logScanAction(scanId, `[PROGRESS] ${stepMessage} (${percent}%)`);
   } catch (e) {
     console.warn(`[Scanner Service] Progress update failed for ${scanId}:`, e.message);
+  }
+}
+
+/**
+ * Helper to add a live log message to the scan
+ */
+export function logScanAction(scanId, message) {
+  try {
+    db.prepare('INSERT INTO scan_logs (scan_id, message) VALUES (?, ?)').run(scanId, message);
+  } catch (e) {
+    console.warn(`[Scanner Service] Log insert failed for ${scanId}:`, e.message);
   }
 }
 
@@ -121,6 +134,41 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
   } catch (err) {
     console.warn(`[Puppeteer Screenshot Notice] Could not capture screenshot for ${pageUrl}: ${err.message}. Using live web screenshot fallback...`);
     return getRealWebsiteScreenshotUrl(pageUrl);
+  }
+}
+
+/**
+ * Generate PDF Report via Puppeteer
+ */
+export async function generateScanReportPdf(scanId, token) {
+  const executablePath = findChromeExecutable();
+  const launchOpts = {
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  };
+  if (executablePath) launchOpts.executablePath = executablePath;
+
+  const puppeteer = await import('puppeteer');
+  const browser = await puppeteer.default.launch(launchOpts);
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1200, height: 1600 });
+    
+    const reportUrl = `http://localhost/eocheck/public/scan-report.html?id=${scanId}&token=${token}`;
+    await page.goto(reportUrl, { waitUntil: 'networkidle0', timeout: 30000 });
+    
+    // Additional wait to ensure data is rendered
+    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 2000)));
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+    });
+
+    return pdfBuffer;
+  } finally {
+    await browser.close();
   }
 }
 
@@ -237,9 +285,103 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
 
       // Construct scanned URLs list (Target URL + Crawled inner pages)
       const scannedUrls = [targetUrl];
-      const sampleInnerPaths = ['/a-propos', '/contact', '/politique-de-confidentialite', '/services', '/mentions-legales'];
-      for (let i = 0; i < Math.min(numPages, sampleInnerPaths.length); i++) {
-        scannedUrls.push(`${parsedUrl.origin}${sampleInnerPaths[i]}`);
+      const maxDepth = parseInt(options.depth || 3, 10);
+      
+      let sitemapUrls = [];
+      let scanMethod = 'SITEMAP';
+      try {
+        const sitemapResponse = await fetch(`${parsedUrl.origin}/sitemap.xml`, {
+          method: 'GET',
+          headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' },
+          signal: AbortSignal.timeout(10000)
+        });
+        if (sitemapResponse.ok && sitemapResponse.headers.get('content-type')?.includes('xml')) {
+          const sitemapXml = await sitemapResponse.text();
+          const matches = sitemapXml.match(/<loc>(.*?)<\/loc>/g);
+          if (matches) {
+            sitemapUrls = matches.map(m => m.replace(/<\/?loc>/g, '').trim());
+          }
+        }
+      } catch (sitemapErr) {
+        console.warn(`[Scanner Service] Could not fetch sitemap.xml for ${targetUrl}: ${sitemapErr.message}`);
+      }
+
+      let added = 0;
+      if (sitemapUrls.length > 0) {
+        scanMethod = 'SITEMAP';
+        logScanAction(scanId, `[SITEMAP] Fichier sitemap.xml détecté avec ${sitemapUrls.length} URLs totales.`);
+        // Filter by depth for sitemaps
+        for (let i = 0; i < sitemapUrls.length && added < numPages; i++) {
+          const sUrl = sitemapUrls[i];
+          if (sUrl.startsWith('http') && !scannedUrls.includes(sUrl)) {
+            try {
+              const p = new URL(sUrl).pathname;
+              const urlDepth = p === '/' ? 0 : p.split('/').filter(Boolean).length;
+              if (urlDepth <= maxDepth) {
+                scannedUrls.push(sUrl);
+                added++;
+                logScanAction(scanId, `[SITEMAP] Ajout de l'URL (${added}/${numPages}): ${sUrl}`);
+              }
+            } catch(e){}
+          }
+        }
+      } else {
+        scanMethod = 'HTML_CRAWLER';
+        logScanAction(scanId, `[CRAWLER] Sitemap invalide ou introuvable. Bascule sur l'exploration HTML (BFS).`);
+        // Fallback: BFS crawler using HTTP fetches (Profondeur dynamique)
+        const queue = [{ url: targetUrl, depth: 0, html: htmlBody }];
+        
+        while (queue.length > 0 && added < numPages) {
+          const current = queue.shift();
+          logScanAction(scanId, `[CRAWLER] Exploration de la page: ${current.url} (Profondeur: ${current.depth})`);
+          
+          let body = current.html;
+          if (!body) {
+            try {
+              const res = await fetch(current.url, {
+                method: 'GET',
+                headers: { 'User-Agent': 'EOCheck-Scanner/1.0' },
+                signal: AbortSignal.timeout(5000)
+              });
+              if (res.ok) body = await res.text();
+            } catch(e) {
+              logScanAction(scanId, `[CRAWLER] Erreur lors de la récupération de ${current.url}`);
+            }
+          }
+          
+          if (body && current.depth < maxDepth) {
+            const hrefMatches = body.match(/href=["']([^"']+)["']/ig);
+            if (hrefMatches) {
+              const extractedPaths = [...new Set(hrefMatches.map(m => m.replace(/href=["']/i, '').replace(/["']/g, '')))];
+              for (let i = 0; i < extractedPaths.length && added < numPages; i++) {
+                let rawUrl = extractedPaths[i];
+                let newUrl = null;
+                if (rawUrl.startsWith(parsedUrl.origin)) {
+                  newUrl = rawUrl;
+                } else if (rawUrl.startsWith('/') && !rawUrl.startsWith('//')) {
+                  newUrl = `${parsedUrl.origin}${rawUrl}`;
+                }
+                
+                if (newUrl && !scannedUrls.includes(newUrl)) {
+                  scannedUrls.push(newUrl);
+                  queue.push({ url: newUrl, depth: current.depth + 1, html: null });
+                  added++;
+                  logScanAction(scanId, `[CRAWLER] Lien trouvé (${added}/${numPages}): ${newUrl}`);
+                }
+              }
+            }
+          }
+        }
+        
+        // If still nothing, fallback to hardcoded
+        if (added === 0) {
+          scanMethod = 'FALLBACK_HARDCODED';
+          logScanAction(scanId, `[FALLBACK] Aucun lien trouvé. Utilisation des chemins par défaut.`);
+          const sampleInnerPaths = ['/a-propos', '/contact', '/politique-de-confidentialite', '/services', '/mentions-legales'];
+          for (let i = 0; i < Math.min(numPages, sampleInnerPaths.length); i++) {
+            scannedUrls.push(`${parsedUrl.origin}${sampleInnerPaths[i]}`);
+          }
+        }
       }
 
       // Stage 4: Screenshots Generation & Physical Disk Storage (90%)
@@ -250,6 +392,8 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
         for (let idx = 0; idx < scannedUrls.length; idx++) {
           const pageUrl = scannedUrls[idx];
           const pageTitle = idx === 0 ? "Page d'accueil (Accueil)" : `Page secondaire #${idx} (${new URL(pageUrl).pathname})`;
+
+          logScanAction(scanId, `[SCREENSHOT] Capture de l'URL (${idx+1}/${scannedUrls.length}): ${pageUrl}`);
 
           // Save physical JPEG image file into outputs/screenshots/SCAN_ID/ with human-readable page name
           const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs);
@@ -278,7 +422,8 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           timeout_sec: timeoutMs / 1000,
           takeScreenshots,
           inspectCookies: options.inspectCookies !== false,
-          inspectTrackers: options.inspectTrackers !== false
+          inspectTrackers: options.inspectTrackers !== false,
+          scan_method: scanMethod
         },
         http_summary: {
           status: httpStatus || 200,

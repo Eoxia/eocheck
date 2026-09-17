@@ -134,7 +134,7 @@
       
       <div style="display: flex; gap: 0.75rem;">
         <button class="btn btn-secondary" onclick="copyReportUrl()">📋 Copier le lien du rapport</button>
-        <button class="btn btn-primary" onclick="window.print()">📄 Télécharger / Imprimer en PDF</button>
+        <button class="btn btn-primary" onclick="downloadServerPdf()">📄 Générer le PDF (Serveur)</button>
       </div>
     </div>
 
@@ -176,6 +176,14 @@
       if (!container) return;
 
       const urlParams = new URLSearchParams(window.location.search);
+      
+      // Allow passing token via URL for Puppeteer PDF rendering
+      const urlToken = urlParams.get('token');
+      if (urlToken) {
+        localStorage.setItem('eo_auth_token', urlToken);
+        authToken = urlToken; // Since app.js might have initialized already
+      }
+
       const scanId = urlParams.get('id') || window.location.hash.replace('#', '');
 
       if (!scanId) {
@@ -191,7 +199,9 @@
 
       try {
         const apiUrl = getApiUrl(`/api/v1/scans/${scanId}`);
-        const res = await fetch(apiUrl);
+        const res = await fetch(apiUrl, {
+          headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+        });
 
         if (!res.ok) throw new Error(`Scan introuvable ou indisponible (ID: ${scanId})`);
 
@@ -274,7 +284,7 @@
                   <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                     <div style="font-size: 0.85rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
                     <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.5rem; word-break: break-all;">${escapeHtml(s.url)}</div>
-                    <img src="${s.preview}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
+                    <img src="${s.preview.startsWith('http') ? s.preview : getApiUrl('/' + s.preview).replace('/api/v1/', '/')}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
                   </div>
                 `).join('')}
               </div>
@@ -321,6 +331,32 @@
           </div>
         `;
       }
+    }
+
+    /**
+     * Call the backend PDF generation API
+     */
+    function downloadServerPdf() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const scanId = urlParams.get('id') || window.location.hash.replace('#', '');
+      if (!scanId || !authToken) return alert("Impossible de générer le PDF : authentification manquante.");
+
+      // Open download link in current tab (will trigger a download attachment)
+      const downloadUrl = getApiUrl(`/api/v1/scans/${scanId}/pdf?token=${authToken}`);
+      
+      const btn = document.querySelector('button[onclick="downloadServerPdf()"]');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = "⏳ Génération PDF en cours...";
+      btn.disabled = true;
+
+      // Small delay just to let UI update, then trigger download
+      setTimeout(() => {
+        window.location.href = downloadUrl;
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+        }, 5000);
+      }, 50);
     }
 
     /**

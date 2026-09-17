@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import Database from 'better-sqlite3';
+import { DatabaseSync as Database } from 'node:sqlite';
 import dotenv from 'dotenv';
 import { runMigrations } from './migrator.js';
 
@@ -17,7 +17,8 @@ if (!fs.existsSync(dataDir)) {
 }
 
 export const db = new Database(resolvedDbPath);
-db.pragma('journal_mode = WAL');
+db.exec('PRAGMA journal_mode = WAL;');
+db.exec('PRAGMA busy_timeout = 5000;');
 
 // Automatically ensure migrations are applied on startup
 runMigrations();
