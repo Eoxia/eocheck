@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Database from 'better-sqlite3';
+import { DatabaseSync as Database } from 'node:sqlite';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -23,7 +23,7 @@ if (!fs.existsSync(dataDir)) {
 export function runMigrations() {
   console.log(`[DB Migrator] Connecting to SQLite database at: ${resolvedDbPath}`);
   const db = new Database(resolvedDbPath);
-  db.pragma('journal_mode = WAL');
+  db.exec('PRAGMA journal_mode = WAL;');
 
   // Ensure migrations table exists
   db.exec(`
@@ -52,15 +52,19 @@ export function runMigrations() {
     import(fileUrl).then((migration) => {
       if (!appliedVersions.has(migration.version)) {
         console.log(`[DB Migrator] Applying migration ${migration.version}_${migration.name}...`);
-        const transaction = db.transaction(() => {
+        try {
+          db.exec('BEGIN');
           migration.up(db);
           db.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(
             migration.version,
             migration.name
           );
-        });
-        transaction();
-        console.log(`[DB Migrator] Migration ${migration.version}_${migration.name} successfully applied.`);
+          db.exec('COMMIT');
+          console.log(`[DB Migrator] Migration ${migration.version}_${migration.name} successfully applied.`);
+        } catch (e) {
+          db.exec('ROLLBACK');
+          throw e;
+        }
       } else {
         console.log(`[DB Migrator] Migration ${migration.version}_${migration.name} already applied.`);
       }

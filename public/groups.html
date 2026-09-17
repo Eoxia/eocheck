@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Groupes - EOCheck</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Header & Navbar -->
+  <header class="navbar">
+    <div class="logo">
+      <span class="logo-icon">🛡️</span>
+      <span style="font-weight: 800; letter-spacing: -0.5px;">EOCheck</span>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs" id="navTabs" style="display: none;">
+      <a href="scans.html" class="nav-tab" data-permission="page:scans">🔍 Scans</a>
+      <a href="settings.html" class="nav-tab" data-permission="page:settings">⚙️ Réglages Général</a>
+      <a href="users.html" class="nav-tab" data-permission="page:users">👥 Utilisateurs & Clés</a>
+      <a href="groups.html" class="nav-tab active" data-permission="page:groups">🛡️ Groupes & Droits</a>
+    </div>
+
+    <div class="user-info" id="userNav">
+      <!-- Injected by app.js -->
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="container" style="max-width: 1000px; margin: 3rem auto;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+      <div>
+        <h1 class="page-title">Gestion des Groupes et Droits</h1>
+        <p style="color: var(--text-dim); margin-top: 0.5rem;">Créez des groupes d'utilisateurs et assignez-leur des permissions spécifiques (RBAC).</p>
+      </div>
+      <button class="btn btn-primary" onclick="openCreateGroupModal()" data-permission="groups:manage">
+        + Nouveau Groupe
+      </button>
+    </div>
+
+    <!-- Panel Groupes -->
+    <div class="panel">
+      <h2 class="panel-title">Groupes Existants</h2>
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nom du Groupe</th>
+              <th>Description</th>
+              <th>Permissions</th>
+              <th style="width: 150px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="groupsTableBody">
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-muted);">Chargement des groupes...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create/Edit Group Modal -->
+  <div class="modal-backdrop" id="groupModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="groupModalTitle">Nouveau Groupe</h3>
+        <button class="close-btn" onclick="closeModal('groupModal')">&times;</button>
+      </div>
+      <form id="groupForm" onsubmit="handleSaveGroup(event)">
+        <input type="hidden" id="groupId" />
+        <div class="form-group">
+          <label class="form-label" for="groupName">Nom du Groupe <span style="color:var(--accent-rose);">*</span></label>
+          <input type="text" id="groupName" class="form-input" placeholder="ex: Analystes SEO" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="groupDescription">Description</label>
+          <input type="text" id="groupDescription" class="form-input" placeholder="Description du groupe">
+        </div>
+        
+        <div style="background: rgba(99, 102, 241, 0.08); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid rgba(99, 102, 241, 0.25); margin-bottom: 1rem;">
+          <h4 style="font-size: 0.95rem; color: var(--primary); margin-bottom: 0.5rem;">🎛️ Limites des Scans (Plafonds)</h4>
+          <div class="form-row" style="gap: 0.5rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="groupMaxPages">Pages Max</label>
+              <input type="number" id="groupMaxPages" class="form-input" value="0" min="0">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="groupMaxTimeout">Timeout Max (s)</label>
+              <input type="number" id="groupMaxTimeout" class="form-input" value="60" min="10">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="groupMaxConcurrent">Scans Simultanés</label>
+              <input type="number" id="groupMaxConcurrent" class="form-input" value="1" min="1">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="groupMaxDepth">Profondeur Max</label>
+              <input type="number" id="groupMaxDepth" class="form-input" value="3" min="1">
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Permissions (Droits)</label>
+          <div id="permissionsList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <!-- Injecté par JS -->
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Enregistrer le Groupe</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/csrf.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/groups.js"></script>
+</body>
+</html>

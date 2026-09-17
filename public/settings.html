@@ -16,10 +16,11 @@
       <span class="brand-badge">eoxia.com</span>
     </a>
 
-    <div class="nav-tabs" id="navTabs">
-      <a href="scans.html" class="nav-tab">🔍 Scans</a>
-      <a href="users.html" class="nav-tab">🔑 Clés API</a>
-      <a href="settings.html" class="nav-tab active">⚙️ Réglages Général</a>
+    <div class="nav-tabs" id="navTabs" style="display: none;">
+      <a href="scans.html" class="nav-tab" data-permission="page:scans">🔍 Scans</a>
+      <a href="settings.html" class="nav-tab active" data-permission="page:settings">⚙️ Réglages Général</a>
+      <a href="users.html" class="nav-tab" data-permission="page:users">👥 Utilisateurs & Clés</a>
+      <a href="groups.html" class="nav-tab" data-permission="page:groups">🛡️ Groupes & Droits</a>
       <a href="system.html" class="nav-tab">📡 Docs API</a>
     </div>
 
@@ -33,7 +34,6 @@
     <!-- Settings Sub-Navigation Tabs -->
     <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem;">
       <button class="btn btn-secondary" id="btnTabUsers" onclick="switchSettingsTab('settingsUsersTab')">👥 Utilisateurs</button>
-      <button class="btn btn-secondary" id="btnTabScanParams" onclick="switchSettingsTab('settingsScanTab')">🎛️ Paramètres des Scans</button>
       <button class="btn btn-secondary" id="btnTabSecurity" onclick="switchSettingsTab('settingsSecurityTab')">🔒 Sécurité & IP</button>
     </div>
 
@@ -64,38 +64,6 @@
           </tbody>
         </table>
       </div>
-    </div>
-
-    <!-- SETTINGS TAB 2: Paramètres des Scans -->
-    <div id="settingsScanTab" class="card" style="display: none;">
-      <div class="card-title">
-        <span>🎛️ Configuration des Scans par Défaut</span>
-      </div>
-
-      <form onsubmit="handleSaveScanSettings(event)">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="settingTimeout">Timeout par défaut (secondes)</label>
-            <input type="number" id="settingTimeout" class="form-control" value="60" min="10" max="180">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="settingNumPages">Pages secondaires à crawler par défaut</label>
-            <input type="number" id="settingNumPages" class="form-control" value="0" min="0" max="10">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="settingMaxConcurrent">Scans simultanés maximaux</label>
-            <input type="number" id="settingMaxConcurrent" class="form-control" value="3" min="1" max="10">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="checkbox-group">
-            <input type="checkbox" id="settingHeadless" checked> Mode Headless activé par défaut (masquer le navigateur)
-          </label>
-        </div>
-
-        <button type="submit" class="btn btn-primary">💾 Enregistrer la Configuration des Scans</button>
-      </form>
     </div>
 
     <!-- SETTINGS TAB 3: Sécurité, IP & Logs de Connexion -->
