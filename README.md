@@ -1,6 +1,10 @@
 # EOCheck - API Service & Scanner Manager
 
 **EOCheck** est le service d'API REST et de gestion des scans de confidentialité, de cookies et de traqueurs pour le site **[eocheck.eoxia.com](https://eocheck.eoxia.com)**.
+Rapport pour les cookies et traqueurs
+Rapport SEO
+Rapport uptime des sites avec copie d'écran
+Rapport de récupération de données affiché lors du scan
 
 Il s'intègre directement avec le gestionnaire de cookies **[eo-tools](https://github.com/Eoxia/eo-tools)** et intègre le scanner Puppeteer via le module **[blacklight-query](https://github.com/Eoxia/blacklight-query)**.
 
