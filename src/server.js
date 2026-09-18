@@ -37,7 +37,7 @@ app.use('/outputs', express.static(outputsDir));
 // Limitation du taux pour les points de terminaison de l'API
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // Limiter chaque IP à 150 requêtes par windowMs
+  max: 1500, // Limiter chaque IP à 1500 requêtes (élevé pour autoriser le polling de logs)
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de requêtes', message: 'Limite de requêtes dépassée. Veuillez réessayer plus tard.' }

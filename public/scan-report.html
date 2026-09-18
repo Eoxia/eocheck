@@ -264,6 +264,7 @@
               <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
               <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
               <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
+              <span>👆 <b>Action Auto Cookies :</b> ${opts.cookieAction === 'accept' ? 'Accepter tous' : (opts.cookieAction === 'reject' ? 'Refuser tous' : 'Ignorer')}</span>
             </div>
           </div>
 
@@ -283,7 +284,9 @@
                 ${screenshots.map(s => `
                   <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                     <div style="font-size: 0.85rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
-                    <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.5rem; word-break: break-all;">${escapeHtml(s.url)}</div>
+                    <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.5rem; word-break: break-all;">
+                      <a href="${escapeHtml(s.url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;" onclick="event.stopPropagation()">${escapeHtml(s.url)}</a>
+                    </div>
                     <img src="${s.preview.startsWith('http') ? s.preview : getApiUrl('/' + s.preview).replace('/api/v1/', '/')}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
                   </div>
                 `).join('')}

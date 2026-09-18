@@ -93,7 +93,7 @@ function getUrlFilenameSlug(pageUrl, pageIndex) {
 /**
  * Capture real website page screenshot with Puppeteer and save as physical JPEG file in outputs/screenshots/SCAN_ID/
  */
-async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadless = true, timeoutMs = 30000) {
+async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadless = true, timeoutMs = 30000, cookieAction = 'none') {
   try {
     const puppeteer = await import('puppeteer');
     const executablePath = findChromeExecutable();
@@ -113,6 +113,46 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 800)));
+
+    if (cookieAction === 'accept' || cookieAction === 'reject') {
+      try {
+        const textToMatch = cookieAction === 'accept' 
+          ? ['accepter', 'accept', 'tout accepter', 'accept all', 'autoriser', 'j\'accepte', 'accepter tout']
+          : ['refuser', 'reject', 'tout refuser', 'reject all', 'continuer sans accepter', 'refuser tout', 'non merci'];
+          
+        await page.evaluate(async (texts, action) => {
+          // Specific selectors for common CMPs
+          const acceptSelectors = ['#tarteaucitronPersonalize2', '#didomi-notice-agree-button', '#axeptio_btn_acceptAll', '.cc-allow', '[data-testid="uc-accept-all-button"]'];
+          const rejectSelectors = ['#tarteaucitronAllDenied2', '#didomi-notice-disagree-button', '#axeptio_btn_dismiss', '.cc-deny', '[data-testid="uc-deny-all-button"]'];
+          const selectors = action === 'accept' ? acceptSelectors : rejectSelectors;
+          
+          for (const sel of selectors) {
+            const btn = document.querySelector(sel);
+            if (btn && btn.offsetHeight > 0 && btn.offsetWidth > 0) {
+              btn.click();
+              return;
+            }
+          }
+
+          // Fallback heuristic based on inner text
+          const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+          for (const btn of buttons) {
+            const btnText = (btn.innerText || '').toLowerCase().trim();
+            if (texts.some(t => btnText === t || btnText.includes(t))) {
+              if (btn.offsetHeight > 0 && btn.offsetWidth > 0) {
+                btn.click();
+                return;
+              }
+            }
+          }
+        }, textToMatch, cookieAction);
+        
+        // Wait a bit for the banner to disappear
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1500)));
+      } catch (e) {
+        console.warn(`[Puppeteer CookieAction] Could not interact with banner on ${pageUrl}: ${e.message}`);
+      }
+    }
 
     // Create physical directory outputs/screenshots/SCAN_ID/
     const scanOutputDir = path.join(screenshotsBaseDir, scanId);
@@ -396,7 +436,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           logScanAction(scanId, `[SCREENSHOT] Capture de l'URL (${idx+1}/${scannedUrls.length}): ${pageUrl}`);
 
           // Save physical JPEG image file into outputs/screenshots/SCAN_ID/ with human-readable page name
-          const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs);
+          const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs, options.cookieAction);
 
           screenshots.push({
             url: pageUrl,
@@ -423,7 +463,8 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           takeScreenshots,
           inspectCookies: options.inspectCookies !== false,
           inspectTrackers: options.inspectTrackers !== false,
-          scan_method: scanMethod
+          scan_method: scanMethod,
+          cookieAction: options.cookieAction || 'none'
         },
         http_summary: {
           status: httpStatus || 200,

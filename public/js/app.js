@@ -543,6 +543,7 @@ async function handleCreateScan(event) {
   const inspectCookies = document.getElementById('scanCookies').checked;
   const inspectTrackers = document.getElementById('scanTrackers').checked;
   const takeScreenshots = document.getElementById('scanScreenshots') ? document.getElementById('scanScreenshots').checked : true;
+  const cookieAction = document.querySelector('input[name="cookieAction"]:checked').value;
 
   try {
     const res = await secureFetch('/api/v1/scans', {
@@ -553,7 +554,7 @@ async function handleCreateScan(event) {
       },
       body: JSON.stringify({
         url,
-        options: { numPages, timeout, depth, headless, inspectCookies, inspectTrackers, takeScreenshots }
+        options: { numPages, timeout, depth, headless, inspectCookies, inspectTrackers, takeScreenshots, cookieAction }
       })
     });
 
@@ -637,6 +638,7 @@ async function viewScanDetails(scanId) {
           <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
           <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
           <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
+          <span>👆 <b>Action Auto Cookies :</b> ${opts.cookieAction === 'accept' ? 'Accepter tous' : (opts.cookieAction === 'reject' ? 'Refuser tous' : 'Ignorer')}</span>
         </div>
       </div>
 
@@ -656,7 +658,9 @@ async function viewScanDetails(scanId) {
             ${screenshots.map(s => `
               <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                 <div style="font-size: 0.82rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
-                <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">${escapeHtml(s.url)}</div>
+                <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">
+                  <a href="${escapeHtml(s.url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;" onclick="event.stopPropagation()">${escapeHtml(s.url)}</a>
+                </div>
                 <img src="${s.preview.startsWith('http') ? s.preview : getApiUrl('/' + s.preview).replace('/api/v1/', '/')}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
               </div>
             `).join('')}
