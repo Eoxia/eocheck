@@ -78,10 +78,40 @@ async function fetchProfile() {
     renderUserNavbar();
     applyPermissionsUI();
     checkPageAccess(); // Vérifier si l'utilisateur a le droit d'être sur la page actuelle
+    loadGlobalDefaults(); // Load scan defaults if on scans page
   } catch (err) {
     const errorMsg = err.message === 'Failed to fetch' ? 'Impossible de joindre le serveur API. Vérifiez que le serveur Node.js est bien démarré.' : err.message;
     console.warn('Authentication check failed:', errorMsg);
     logout();
+  }
+}
+
+async function loadGlobalDefaults() {
+  const pagesInput = document.getElementById('scanPages');
+  if (!pagesInput) return; // Not on scans page
+
+  try {
+    const res = await fetch(getApiUrl('/api/v1/public-config'), {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await parseJsonResponse(res);
+    
+    if (data.default_scan_options) {
+      const d = data.default_scan_options;
+      if (document.getElementById('scanPages')) document.getElementById('scanPages').value = d.numPages ?? 0;
+      if (document.getElementById('scanTimeout')) document.getElementById('scanTimeout').value = d.timeout ?? 60;
+      if (document.getElementById('scanDepth')) document.getElementById('scanDepth').value = d.depth ?? 1;
+      if (document.getElementById('scanHeadless')) document.getElementById('scanHeadless').checked = d.headless ?? true;
+      if (document.getElementById('scanCookies')) document.getElementById('scanCookies').checked = d.inspectCookies ?? true;
+      if (document.getElementById('scanTrackers')) document.getElementById('scanTrackers').checked = d.inspectTrackers ?? true;
+      if (document.getElementById('scanScreenshots')) document.getElementById('scanScreenshots').checked = d.takeScreenshots ?? true;
+      
+      const radio = document.querySelector(`input[name="cookieAction"][value="${d.cookieAction}"]`);
+      if (radio) radio.checked = true;
+    }
+  } catch (err) {
+    console.warn('Could not load global defaults', err);
   }
 }
 
@@ -723,8 +753,69 @@ async function loadSettings() {
 
     const blacklistText = document.getElementById('ipBlacklistText');
     if (blacklistText && Array.isArray(s.ip_blacklist)) blacklistText.value = s.ip_blacklist.join('\n');
+
+    // Default scan options
+    if (s.default_scan_options) {
+      const d = s.default_scan_options;
+      if (document.getElementById('defPages')) document.getElementById('defPages').value = d.numPages ?? 0;
+      if (document.getElementById('defTimeout')) document.getElementById('defTimeout').value = d.timeout ?? 60;
+      if (document.getElementById('defDepth')) document.getElementById('defDepth').value = d.depth ?? 1;
+      if (document.getElementById('defHeadless')) document.getElementById('defHeadless').checked = d.headless ?? true;
+      if (document.getElementById('defCookies')) document.getElementById('defCookies').checked = d.inspectCookies ?? true;
+      if (document.getElementById('defTrackers')) document.getElementById('defTrackers').checked = d.inspectTrackers ?? true;
+      if (document.getElementById('defScreenshots')) document.getElementById('defScreenshots').checked = d.takeScreenshots ?? true;
+      
+      const radio = document.querySelector(`input[name="defCookieAction"][value="${d.cookieAction}"]`);
+      if (radio) radio.checked = true;
+    }
+
   } catch (err) {
     console.warn('Load settings notice:', err.message);
+  }
+}
+
+/**
+ * Save Scan Defaults
+ */
+async function handleSaveDefaults(event) {
+  event.preventDefault();
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const defs = {
+    numPages: parseInt(document.getElementById('defPages').value, 10),
+    timeout: parseInt(document.getElementById('defTimeout').value, 10),
+    depth: parseInt(document.getElementById('defDepth').value, 10),
+    headless: document.getElementById('defHeadless').checked,
+    inspectCookies: document.getElementById('defCookies').checked,
+    inspectTrackers: document.getElementById('defTrackers').checked,
+    takeScreenshots: document.getElementById('defScreenshots').checked,
+    cookieAction: document.querySelector('input[name="defCookieAction"]:checked').value
+  };
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        settings: {
+          default_scan_options: defs
+        }
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Valeurs par défaut enregistrées', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 

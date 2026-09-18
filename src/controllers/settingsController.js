@@ -28,13 +28,20 @@ export function getSettings(req, res) {
  */
 export function getPublicConfig(req, res) {
   try {
-    const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('scanner_max_timeout', 'scanner_max_num_pages')").all();
+    const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('scanner_max_timeout', 'scanner_max_num_pages', 'default_scan_options')").all();
     const config = {};
-    rows.forEach(r => config[r.key] = parseInt(r.value, 10));
+    rows.forEach(r => {
+      if (r.key === 'default_scan_options') {
+        try { config[r.key] = JSON.parse(r.value); } catch(e) {}
+      } else {
+        config[r.key] = parseInt(r.value, 10);
+      }
+    });
     
     return res.json({
       scanner_max_timeout: config.scanner_max_timeout || 180,
-      scanner_max_num_pages: config.scanner_max_num_pages || 10
+      scanner_max_num_pages: config.scanner_max_num_pages || 10,
+      default_scan_options: config.default_scan_options || null
     });
   } catch (error) {
     console.error('[Settings Controller] Get public config error:', error);
