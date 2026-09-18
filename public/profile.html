@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EOCheck - Mon Profil</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/styles.css">
   <style>
     .verification-badge {
       display: inline-block;
@@ -26,13 +26,23 @@
 </head>
 <body>
 
-  <!-- Top Navigation Bar -->
-  <nav class="navbar" id="topNavbar">
-    <div class="nav-brand">
-      <span class="logo-shield">🛡️</span> EOCheck <span class="logo-domain">eoxia.com</span>
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab" data-permission="page:scans">🔍 Scans</a>
+      <a href="users.html" class="nav-tab" data-permission="page:users">🔑 Clés API</a>
+      <a href="groups.html" class="nav-tab" data-permission="page:groups">🛡️ Groupes & Droits</a>
+      <a href="settings.html" class="nav-tab" data-permission="page:settings">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab" data-permission="page:system">📡 Docs API</a>
     </div>
-    <div class="nav-links" id="navLinks">
-      <!-- Injected by JS based on role -->
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
     </div>
   </nav>
 
