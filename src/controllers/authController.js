@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
+import { sendVerificationEmail } from '../services/emailService.js';
 import { getClientIp } from '../middleware/ipFilter.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'local_dev_jwt_secret_eocheck_2026';
@@ -132,7 +133,7 @@ export async function login(req, res) {
  */
 export function getMe(req, res) {
   try {
-    const user = db.prepare('SELECT id, email, role, first_name, last_name, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, email, role, first_name, last_name, phone, email_verified, email_verification_expires, created_at FROM users WHERE id = ?').get(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'Not Found', message: 'User not found' });
     }
@@ -161,5 +162,77 @@ export function getMe(req, res) {
     return res.json({ user });
   } catch (error) {
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch user profile' });
+  }
+}
+
+/**
+ * Request email verification
+ */
+export async function requestEmailVerification(req, res) {
+  try {
+    const user = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'Not Found', message: 'Utilisateur introuvable' });
+    if (user.email_verified) return res.status(400).json({ error: 'Bad Request', message: 'E-mail déjà vérifié' });
+
+    // Generate 6 digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Valid for 15 minutes
+    db.prepare(`
+      UPDATE users 
+      SET email_verification_code = ?, 
+          email_verification_expires = datetime('now', '+15 minutes') 
+      WHERE id = ?
+    `).run(code, req.user.id);
+
+    const sent = await sendVerificationEmail(user.email, code);
+    if (!sent) {
+      return res.status(500).json({ error: 'Internal Server Error', message: 'Erreur lors de l\'envoi de l\'e-mail. Vérifiez la configuration SMTP.' });
+    }
+
+    return res.json({ message: 'Code de vérification envoyé avec succès' });
+  } catch (error) {
+    console.error('[Auth Controller] Request verification error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to send verification email' });
+  }
+}
+
+/**
+ * Confirm email verification
+ */
+export function confirmEmailVerification(req, res) {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'Bad Request', message: 'Le code est requis' });
+
+    const user = db.prepare('SELECT email_verification_code, email_verification_expires FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'Not Found', message: 'Utilisateur introuvable' });
+
+    if (!user.email_verification_code) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Aucune vérification en cours' });
+    }
+
+    // Check expiration
+    const expiresAt = new Date(user.email_verification_expires + 'Z').getTime(); // sqlite UTC
+    if (Date.now() > expiresAt) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Le code a expiré. Veuillez en demander un nouveau.' });
+    }
+
+    if (user.email_verification_code !== code.toString().trim()) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Code incorrect' });
+    }
+
+    db.prepare(`
+      UPDATE users 
+      SET email_verified = 1, 
+          email_verification_code = NULL, 
+          email_verification_expires = NULL 
+      WHERE id = ?
+    `).run(req.user.id);
+
+    return res.json({ message: 'E-mail vérifié avec succès !' });
+  } catch (error) {
+    console.error('[Auth Controller] Confirm verification error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to confirm verification' });
   }
 }

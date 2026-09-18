@@ -79,6 +79,7 @@ async function fetchProfile() {
     applyPermissionsUI();
     checkPageAccess(); // Vérifier si l'utilisateur a le droit d'être sur la page actuelle
     loadGlobalDefaults(); // Load scan defaults if on scans page
+    initProfilePage(); // Load profile data if on profile page
   } catch (err) {
     const errorMsg = err.message === 'Failed to fetch' ? 'Impossible de joindre le serveur API. Vérifiez que le serveur Node.js est bien démarré.' : err.message;
     console.warn('Authentication check failed:', errorMsg);
@@ -180,6 +181,7 @@ function renderUserNavbar() {
       userNav.innerHTML = `
         <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
         <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
+        <a href="profile.html" class="btn btn-secondary btn-sm" style="margin-left: 0.5rem; margin-right: 0.5rem;">👤 Profil</a>
         <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
       `;
     }
@@ -194,6 +196,7 @@ function renderUserNavbar() {
       }
     }
   } else {
+    if (navTabs) navTabs.style.display = 'none';
     if (userNav) {
       userNav.innerHTML = `<a href="login.html" class="btn btn-primary btn-sm">Se connecter</a>`;
     }
@@ -204,7 +207,7 @@ function renderUserNavbar() {
  * Switch Settings Page Sub-Tabs
  */
 function switchSettingsTab(tabId) {
-  const tabs = ['settingsUsersTab', 'settingsScanTab', 'settingsSecurityTab'];
+  const tabs = ['settingsUsersTab', 'settingsScanTab', 'settingsSecurityTab', 'settingsDefaultsTab', 'settingsEmailTab'];
   tabs.forEach(t => {
     const el = document.getElementById(t);
     if (el) el.style.display = (t === tabId) ? 'block' : 'none';
@@ -213,7 +216,9 @@ function switchSettingsTab(tabId) {
   const btnMap = {
     'settingsUsersTab': 'btnTabUsers',
     'settingsScanTab': 'btnTabScanParams',
-    'settingsSecurityTab': 'btnTabSecurity'
+    'settingsSecurityTab': 'btnTabSecurity',
+    'settingsDefaultsTab': 'btnTabDefaults',
+    'settingsEmailTab': 'btnTabEmail'
   };
 
   Object.entries(btnMap).forEach(([t, btnId]) => {
@@ -230,7 +235,7 @@ function switchSettingsTab(tabId) {
   });
 
   if (tabId === 'settingsUsersTab') loadAdminUsers();
-  if (tabId === 'settingsScanTab' || tabId === 'settingsSecurityTab') loadSettings();
+  if (tabId === 'settingsScanTab' || tabId === 'settingsSecurityTab' || tabId === 'settingsDefaultsTab' || tabId === 'settingsEmailTab') loadSettings();
   if (tabId === 'settingsSecurityTab') loadLoginLogs();
 }
 
@@ -769,6 +774,24 @@ async function loadSettings() {
       if (radio) radio.checked = true;
     }
 
+    // SMTP Config
+    if (s.smtp_config) {
+      const c = s.smtp_config;
+      if (document.getElementById('smtpHost')) document.getElementById('smtpHost').value = c.host || '';
+      if (document.getElementById('smtpPort')) document.getElementById('smtpPort').value = c.port || 587;
+      if (document.getElementById('smtpUser')) document.getElementById('smtpUser').value = c.user || '';
+      if (document.getElementById('smtpPass')) document.getElementById('smtpPass').value = c.pass || '';
+      if (document.getElementById('smtpFrom')) document.getElementById('smtpFrom').value = c.from || '';
+      if (document.getElementById('smtpSecure')) document.getElementById('smtpSecure').checked = c.secure || false;
+    }
+
+    // Email Templates
+    if (s.email_template_verification) {
+      const t = s.email_template_verification;
+      if (document.getElementById('tplVerifySubject')) document.getElementById('tplVerifySubject').value = t.subject || '';
+      if (document.getElementById('tplVerifyBody')) document.getElementById('tplVerifyBody').value = t.body || '';
+    }
+
   } catch (err) {
     console.warn('Load settings notice:', err.message);
   }
@@ -814,6 +837,80 @@ async function handleSaveDefaults(event) {
     if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
 
     showToast('Valeurs par défaut enregistrées', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Save SMTP Settings
+ */
+async function handleSaveSmtpSettings(event) {
+  event.preventDefault();
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const smtp_config = {
+    host: document.getElementById('smtpHost').value.trim(),
+    port: parseInt(document.getElementById('smtpPort').value, 10),
+    user: document.getElementById('smtpUser').value.trim(),
+    pass: document.getElementById('smtpPass').value.trim(),
+    from: document.getElementById('smtpFrom').value.trim(),
+    secure: document.getElementById('smtpSecure').checked
+  };
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ settings: { smtp_config } })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Configuration SMTP enregistrée', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Save Email Templates
+ */
+async function handleSaveEmailTemplates(event) {
+  event.preventDefault();
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const email_template_verification = {
+    subject: document.getElementById('tplVerifySubject').value.trim(),
+    body: document.getElementById('tplVerifyBody').value.trim()
+  };
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ settings: { email_template_verification } })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Modèles d\'e-mails enregistrés', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1220,4 +1317,104 @@ function formatDate(isoStr) {
   if (!isoStr) return '-';
   const d = new Date(isoStr);
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+/**
+ * =====================================
+ * PROFILE LOGIC
+ * =====================================
+ */
+
+function initProfilePage() {
+  if (!document.getElementById('profileFirstName')) return; // Not on profile page
+
+  document.getElementById('profileFirstName').value = currentUser.first_name || '';
+  document.getElementById('profileLastName').value = currentUser.last_name || '';
+  document.getElementById('profilePhone').value = currentUser.phone || '';
+  document.getElementById('profileEmail').value = currentUser.email || '';
+
+  const badge = document.getElementById('emailBadge');
+  const verifyBox = document.getElementById('verifyEmailBox');
+
+  if (currentUser.email_verified) {
+    badge.textContent = 'Vérifié';
+    badge.className = 'verification-badge verified';
+    verifyBox.style.display = 'none';
+  } else {
+    badge.textContent = 'Non vérifié';
+    badge.className = 'verification-badge unverified';
+    verifyBox.style.display = 'block';
+  }
+}
+
+async function handleUpdateProfile(event) {
+  event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.textContent = 'Sauvegarde...';
+  btn.disabled = true;
+
+  try {
+    const res = await secureFetch('/api/v1/users/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({
+        first_name: document.getElementById('profileFirstName').value.trim(),
+        last_name: document.getElementById('profileLastName').value.trim(),
+        phone: document.getElementById('profilePhone').value.trim()
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Profil mis à jour avec succès', 'success');
+    await fetchProfile(); // Refresh current user
+    initProfilePage(); // Re-render
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+async function requestEmailVerificationCode() {
+  try {
+    const res = await secureFetch('/api/v1/auth/verify-email/request', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la demande de code');
+
+    showToast('Code de vérification envoyé à votre adresse e-mail', 'success');
+    openModal('verifyEmailModal');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function confirmEmailVerificationCode(event) {
+  event.preventDefault();
+  const code = document.getElementById('verificationCode').value.trim();
+  
+  try {
+    const res = await secureFetch('/api/v1/auth/verify-email/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({ code })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur de vérification');
+
+    showToast('E-mail vérifié avec succès !', 'success');
+    closeModal('verifyEmailModal');
+    await fetchProfile();
+    initProfilePage();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }

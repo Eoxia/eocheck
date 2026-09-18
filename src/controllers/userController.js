@@ -149,3 +149,23 @@ export function deleteUser(req, res) {
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to delete user' });
   }
 }
+
+/**
+ * Self: Update profile
+ */
+export function updateProfile(req, res) {
+  try {
+    const { first_name, last_name, phone } = req.body;
+    
+    db.prepare(`
+      UPDATE users 
+      SET first_name = ?, last_name = ?, phone = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(first_name || '', last_name || '', phone || '', req.user.id);
+
+    return res.json({ message: 'Profil mis à jour avec succès' });
+  } catch (error) {
+    console.error('[User Controller] Update profile error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update profile' });
+  }
+}

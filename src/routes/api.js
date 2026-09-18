@@ -2,10 +2,10 @@ import express from 'express';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { getCsrfToken, verifyCsrfToken } from '../middleware/csrf.js';
 import { enforceIpFilter } from '../middleware/ipFilter.js';
-import { register, login, getMe } from '../controllers/authController.js';
+import { register, login, getMe, requestEmailVerification, confirmEmailVerification } from '../controllers/authController.js';
 import { createToken, listTokens, revokeToken } from '../controllers/tokenController.js';
 import { createScan, getScan, listScans, getActiveScanLogs, downloadScanPdf } from '../controllers/scanController.js';
-import { listUsers, createUser, createTokenForUser, deleteUser } from '../controllers/userController.js';
+import { listUsers, createUser, createTokenForUser, deleteUser, updateProfile } from '../controllers/userController.js';
 import { getSettings, updateSettings, getLoginLogs, getPublicConfig } from '../controllers/settingsController.js';
 import { listGroups, createGroup, updateGroup, deleteGroup, listSystemPermissions } from '../controllers/groupController.js';
 
@@ -41,6 +41,8 @@ router.use(verifyCsrfToken);
 router.post('/auth/register', register);
 router.post('/auth/login', login);
 router.get('/auth/me', authenticateToken, getMe);
+router.post('/auth/verify-email/request', authenticateToken, requestEmailVerification);
+router.post('/auth/verify-email/confirm', authenticateToken, confirmEmailVerification);
 
 // API Token Management Routes (Self)
 router.post('/tokens', authenticateToken, createToken);
@@ -57,6 +59,9 @@ router.get('/admin/users', authenticateToken, requirePermission('page:users'), l
 router.post('/admin/users', authenticateToken, requirePermission('users:manage'), createUser);
 router.post('/admin/users/:userId/tokens', authenticateToken, requirePermission('users:manage'), createTokenForUser);
 router.delete('/admin/users/:id', authenticateToken, requirePermission('users:manage'), deleteUser);
+
+// Self User Route
+router.put('/users/me', authenticateToken, updateProfile);
 
 // Groups Management
 router.get('/admin/groups', authenticateToken, requirePermission('page:groups'), listGroups);

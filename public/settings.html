@@ -36,6 +36,7 @@
       <button class="btn btn-secondary" id="btnTabUsers" onclick="switchSettingsTab('settingsUsersTab')">👥 Utilisateurs</button>
       <button class="btn btn-secondary" id="btnTabSecurity" onclick="switchSettingsTab('settingsSecurityTab')">🔒 Sécurité & IP</button>
       <button class="btn btn-secondary" id="btnTabDefaults" onclick="switchSettingsTab('settingsDefaultsTab')">🎛️ Valeurs par défaut</button>
+      <button class="btn btn-secondary" id="btnTabEmail" onclick="switchSettingsTab('settingsEmailTab')">✉️ Réglages E-mail</button>
     </div>
 
     <!-- SETTINGS TAB 1: Utilisateurs -->
@@ -171,6 +172,60 @@
         </div>
 
         <button type="submit" class="btn btn-primary">💾 Enregistrer les valeurs par défaut</button>
+      </form>
+    </div>
+
+    <!-- SETTINGS TAB 5: Email Settings -->
+    <div id="settingsEmailTab" class="card" style="display: none;">
+      <div class="card-title">
+        <span>✉️ Configuration SMTP & E-mails</span>
+      </div>
+      
+      <form onsubmit="handleSaveSmtpSettings(event)" style="margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color);">
+        <h3 style="margin-bottom: 1rem;">Serveur SMTP</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpHost">Hôte SMTP (ex: smtp.mailtrap.io)</label>
+            <input type="text" id="smtpHost" class="form-control" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="smtpPort">Port (ex: 587)</label>
+            <input type="number" id="smtpPort" class="form-control" value="587">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpUser">Utilisateur</label>
+            <input type="text" id="smtpUser" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="smtpPass">Mot de passe</label>
+            <input type="password" id="smtpPass" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpFrom">Adresse expéditeur</label>
+            <input type="email" id="smtpFrom" class="form-control" placeholder="noreply@eocheck.com">
+          </div>
+          <label class="checkbox-group" style="margin-top: 1.5rem;">
+            <input type="checkbox" id="smtpSecure"> Connexion sécurisée (SSL/TLS - Port 465)
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Sauvegarder SMTP</button>
+      </form>
+
+      <form onsubmit="handleSaveEmailTemplates(event)">
+        <h3 style="margin-bottom: 1rem;">Modèles d'E-mails</h3>
+        <div class="form-group">
+          <label class="form-label" for="tplVerifySubject">Sujet : Vérification d'e-mail</label>
+          <input type="text" id="tplVerifySubject" class="form-control" value="EOCheck - Vérification de votre adresse e-mail">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tplVerifyBody">Corps : Vérification d'e-mail (HTML autorisé, utilisez {CODE} pour insérer le code)</label>
+          <textarea id="tplVerifyBody" class="form-control" rows="5"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Sauvegarder Modèles</button>
       </form>
     </div>
 
