@@ -983,6 +983,25 @@ function openEditTemplateModal(key, subject, body) {
     return txt.value;
   };
   
+  // Mapping des variables par modèle
+  const variablesMap = {
+    'tpl_account_created': ['__FIRSTNAME__', '__LASTNAME__', '__EMAIL__'],
+    'tpl_scan_finished': ['__SCAN_URL__', '__REPORT_LINK__'],
+    'tpl_send_report': ['__SCAN_URL__'],
+    'tpl_password_reset': ['__RESET_LINK__'],
+    'tpl_verify_email': ['__CODE__'],
+    'tpl_smtp_test': []
+  };
+
+  const vars = variablesMap[key] || [];
+  const helpDiv = document.getElementById('tplVariablesHelp');
+  
+  if (vars.length > 0) {
+    helpDiv.innerHTML = vars.map(v => `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); cursor: copy;" onclick="navigator.clipboard.writeText('${v}'); showToast('${v} copié !', 'success')">${v}</span>`).join('');
+  } else {
+    helpDiv.innerHTML = '<span style="font-style: italic; color: #666;">Aucune variable disponible pour ce modèle.</span>';
+  }
+
   document.getElementById('editTemplateKey').value = key;
   document.getElementById('editTemplateSubject').value = unescapeHtml(subject);
   document.getElementById('editTemplateBody').value = unescapeHtml(body);

@@ -249,6 +249,14 @@
       </div>
       <form onsubmit="handleSaveEmailTemplate(event)">
         <input type="hidden" id="editTemplateKey">
+        
+        <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 4px; padding: 10px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+          <strong style="color: var(--accent-indigo);">💡 Variables de substitution :</strong>
+          <div id="tplVariablesHelp" style="margin-top: 4px; font-family: monospace; display: flex; flex-wrap: wrap; gap: 6px;">
+            <!-- Variables injected dynamically -->
+          </div>
+        </div>
+
         <div class="form-group">
           <label class="form-label" for="editTemplateSubject">Sujet</label>
           <input type="text" id="editTemplateSubject" class="form-control" required>
