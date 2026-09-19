@@ -254,8 +254,18 @@
           <input type="text" id="editTemplateSubject" class="form-control" required>
         </div>
         <div class="form-group">
-          <label class="form-label" for="editTemplateBody">Corps (HTML autorisé)</label>
-          <textarea id="editTemplateBody" class="form-control" rows="8" required></textarea>
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.5rem;">
+            <label class="form-label" style="margin-bottom: 0;">Corps (HTML autorisé)</label>
+            <div style="display: flex; gap: 4px;">
+              <button type="button" id="btnTplEditorHtml" onclick="switchTplEditorTab('html')" style="background: var(--accent-indigo); color: #fff; border: 1px solid var(--accent-indigo); padding: 4px 12px; font-size: 0.8rem; border-radius: 4px 4px 0 0; cursor: pointer;">Source HTML</button>
+              <button type="button" id="btnTplEditorPreview" onclick="switchTplEditorTab('preview')" style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-bottom: none; padding: 4px 12px; font-size: 0.8rem; border-radius: 4px 4px 0 0; cursor: pointer;">Rendu Visuel</button>
+            </div>
+          </div>
+          <div id="tplEditorHtmlContainer">
+            <textarea id="editTemplateBody" class="form-control" rows="8" required style="border-top-right-radius: 0;"></textarea>
+          </div>
+          <div id="tplEditorPreviewContainer" class="form-control" style="display: none; background: #fff; color: #333; padding: 1rem; min-height: 180px; max-height: 300px; overflow-y: auto; border-top-right-radius: 0; border-top-left-radius: 0;">
+          </div>
         </div>
         <button type="submit" class="btn btn-primary" style="width: 100%;">Enregistrer le modèle</button>
       </form>

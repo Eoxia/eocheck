@@ -940,6 +940,41 @@ async function loadEmailTemplates() {
   }
 }
 
+function switchTplEditorTab(tab) {
+  const btnHtml = document.getElementById('btnTplEditorHtml');
+  const btnPreview = document.getElementById('btnTplEditorPreview');
+  const htmlContainer = document.getElementById('tplEditorHtmlContainer');
+  const previewContainer = document.getElementById('tplEditorPreviewContainer');
+  const textarea = document.getElementById('editTemplateBody');
+
+  if (tab === 'html') {
+    btnHtml.style.background = 'var(--accent-indigo)';
+    btnHtml.style.color = '#fff';
+    btnHtml.style.borderColor = 'var(--accent-indigo)';
+    
+    btnPreview.style.background = 'transparent';
+    btnPreview.style.color = 'var(--text-secondary)';
+    btnPreview.style.borderColor = 'var(--border-color)';
+
+    htmlContainer.style.display = 'block';
+    previewContainer.style.display = 'none';
+  } else {
+    btnPreview.style.background = 'var(--accent-indigo)';
+    btnPreview.style.color = '#fff';
+    btnPreview.style.borderColor = 'var(--accent-indigo)';
+    
+    btnHtml.style.background = 'transparent';
+    btnHtml.style.color = 'var(--text-secondary)';
+    btnHtml.style.borderColor = 'var(--border-color)';
+
+    htmlContainer.style.display = 'none';
+    previewContainer.style.display = 'block';
+    
+    // Inject HTML content into preview
+    previewContainer.innerHTML = textarea.value || '<p style="color:#999; font-style:italic;">Vide</p>';
+  }
+}
+
 function openEditTemplateModal(key, subject, body) {
   // Simple unescape for modal values
   const unescapeHtml = (str) => {
@@ -951,6 +986,8 @@ function openEditTemplateModal(key, subject, body) {
   document.getElementById('editTemplateKey').value = key;
   document.getElementById('editTemplateSubject').value = unescapeHtml(subject);
   document.getElementById('editTemplateBody').value = unescapeHtml(body);
+  
+  switchTplEditorTab('html');
   openModal('editTemplateModal');
 }
 
