@@ -179,10 +179,22 @@ function renderUserNavbar() {
         : currentUser.email;
 
       userNav.innerHTML = `
-        <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
-        <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
-        <a href="profile.html" class="btn btn-secondary btn-sm" style="margin-left: 0.5rem; margin-right: 0.5rem;">👤 Profil</a>
-        <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
+        <div class="user-dropdown-container">
+          <div class="user-dropdown-trigger" onclick="toggleUserDropdown(event)">
+            <span class="role-pill ${currentUser.role}">${currentUser.role.toUpperCase()}</span>
+            <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div id="userDropdownMenu" class="user-dropdown-menu">
+            <div class="dropdown-header">
+              <strong style="display: block;">${escapeHtml(displayName)}</strong>
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(currentUser.email)}</span>
+            </div>
+            <a href="profile.html" class="dropdown-item">👤 Mon Profil</a>
+            <hr class="dropdown-divider">
+            <button class="dropdown-item text-danger" onclick="logout()" style="width: 100%; text-align: left; background: transparent; border: none; font-size: inherit; cursor: pointer;">🚪 Déconnexion</button>
+          </div>
+        </div>
       `;
     }
 
@@ -1587,3 +1599,28 @@ function toggleLiveLogs() {
     btn.title = "Réduire";
   }
 }
+
+/**
+ * =====================================
+ * USER DROPDOWN LOGIC
+ * =====================================
+ */
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('userDropdownMenu');
+  if (menu) {
+    menu.classList.toggle('show');
+  }
+}
+
+// Close the dropdown if the user clicks outside of it
+window.addEventListener('click', function(event) {
+  const menu = document.getElementById('userDropdownMenu');
+  const trigger = document.querySelector('.user-dropdown-trigger');
+  
+  if (menu && menu.classList.contains('show')) {
+    if (!menu.contains(event.target) && !trigger.contains(event.target)) {
+      menu.classList.remove('show');
+    }
+  }
+});
