@@ -1502,3 +1502,32 @@ async function confirmEmailVerificationCode(event) {
     showToast(err.message, 'error');
   }
 }
+
+/**
+ * =====================================
+ * LIVE LOGS WIDGET LOGIC
+ * =====================================
+ */
+let isLiveLogsMinimized = false;
+
+function toggleLiveLogs() {
+  const box = document.getElementById('liveLogsBox');
+  const content = document.getElementById('liveLogsContent');
+  const btn = document.getElementById('btnToggleLogs');
+  
+  if (!box || !content || !btn) return;
+
+  isLiveLogsMinimized = !isLiveLogsMinimized;
+
+  if (isLiveLogsMinimized) {
+    box.style.height = '35px'; // Height of the header
+    content.style.display = 'none';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+    btn.title = "Agrandir";
+  } else {
+    box.style.height = '300px';
+    content.style.display = 'flex';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    btn.title = "Réduire";
+  }
+}
