@@ -71,12 +71,12 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">
+          <label class="form-label" for="profileEmail">
             Adresse E-mail
             <span id="emailBadge" class="verification-badge unverified">Non vérifié</span>
           </label>
-          <input type="email" id="profileEmail" class="form-control" disabled style="background-color: var(--bg-hover);">
-          <small style="color: var(--text-muted);">L'adresse e-mail ne peut pas être modifiée.</small>
+          <input type="email" id="profileEmail" class="form-control" required>
+          <small style="color: var(--text-muted); display: block; margin-top: 4px;">Si vous changez d'adresse, vous devrez la vérifier à nouveau.</small>
           
           <div id="verifyEmailBox" style="margin-top: 0.5rem; display: none;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="requestEmailVerificationCode()">

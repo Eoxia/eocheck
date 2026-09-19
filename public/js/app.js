@@ -1513,7 +1513,8 @@ async function handleUpdateProfile(event) {
       body: JSON.stringify({
         first_name: document.getElementById('profileFirstName').value.trim(),
         last_name: document.getElementById('profileLastName').value.trim(),
-        phone: document.getElementById('profilePhone').value.trim()
+        phone: document.getElementById('profilePhone').value.trim(),
+        email: document.getElementById('profileEmail').value.trim()
       })
     });
 
