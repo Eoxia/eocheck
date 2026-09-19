@@ -987,7 +987,7 @@ function openEditTemplateModal(key, subject, body) {
   document.getElementById('editTemplateSubject').value = unescapeHtml(subject);
   document.getElementById('editTemplateBody').value = unescapeHtml(body);
   
-  switchTplEditorTab('html');
+  switchTplEditorTab('preview');
   openModal('editTemplateModal');
 }
 
