@@ -213,23 +213,54 @@
           </label>
         </div>
         <button type="submit" class="btn btn-primary">💾 Sauvegarder SMTP</button>
+        <button type="button" class="btn btn-secondary" onclick="handleTestSmtp()" style="margin-left: 1rem;">✉️ Envoyer un e-mail de test</button>
       </form>
 
-      <form onsubmit="handleSaveEmailTemplates(event)">
-        <h3 style="margin-bottom: 1rem;">Modèles d'E-mails</h3>
-        <div class="form-group">
-          <label class="form-label" for="tplVerifySubject">Sujet : Vérification d'e-mail</label>
-          <input type="text" id="tplVerifySubject" class="form-control" value="EOCheck - Vérification de votre adresse e-mail">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="tplVerifyBody">Corps : Vérification d'e-mail (HTML autorisé, utilisez {CODE} pour insérer le code)</label>
-          <textarea id="tplVerifyBody" class="form-control" rows="5"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Sauvegarder Modèles</button>
-      </form>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">Modèles d'E-mails</h3>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Variable de substitution : <code>__NOMDELAVARIABLE__</code></p>
+      </div>
+
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Modèle</th>
+              <th>Sujet</th>
+              <th>Statut</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="emailTemplatesTableBody">
+            <!-- Templates will be loaded here -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
   </main>
+
+  <!-- MODAL: Edit Email Template -->
+  <div id="editTemplateModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Modifier le Modèle</h3>
+        <button class="close-btn" onclick="closeModal('editTemplateModal')">&times;</button>
+      </div>
+      <form onsubmit="handleSaveEmailTemplate(event)">
+        <input type="hidden" id="editTemplateKey">
+        <div class="form-group">
+          <label class="form-label" for="editTemplateSubject">Sujet</label>
+          <input type="text" id="editTemplateSubject" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editTemplateBody">Corps (HTML autorisé)</label>
+          <textarea id="editTemplateBody" class="form-control" rows="8" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Enregistrer le modèle</button>
+      </form>
+    </div>
+  </div>
 
   <!-- MODAL: Create User / Admin Account -->
   <div id="createUserModal" class="modal-backdrop">

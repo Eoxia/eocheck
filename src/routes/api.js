@@ -6,7 +6,7 @@ import { register, login, getMe, requestEmailVerification, confirmEmailVerificat
 import { createToken, listTokens, revokeToken } from '../controllers/tokenController.js';
 import { createScan, getScan, listScans, getActiveScanLogs, downloadScanPdf } from '../controllers/scanController.js';
 import { listUsers, createUser, createTokenForUser, deleteUser, updateProfile } from '../controllers/userController.js';
-import { getSettings, updateSettings, getLoginLogs, getPublicConfig } from '../controllers/settingsController.js';
+import { getSettings, updateSettings, getLoginLogs, getPublicConfig, listEmailTemplates, updateEmailTemplate, resetEmailTemplate, testSmtp } from '../controllers/settingsController.js';
 import { listGroups, createGroup, updateGroup, deleteGroup, listSystemPermissions } from '../controllers/groupController.js';
 
 const router = express.Router();
@@ -53,6 +53,10 @@ router.delete('/tokens/:id', authenticateToken, revokeToken);
 router.get('/public-config', authenticateToken, getPublicConfig);
 router.get('/settings', authenticateToken, requirePermission('page:settings'), getSettings);
 router.put('/settings', authenticateToken, requirePermission('settings:edit'), updateSettings);
+router.get('/settings/email-templates', authenticateToken, requirePermission('page:settings'), listEmailTemplates);
+router.put('/settings/email-templates/:key', authenticateToken, requirePermission('settings:edit'), updateEmailTemplate);
+router.delete('/settings/email-templates/:key', authenticateToken, requirePermission('settings:edit'), resetEmailTemplate);
+router.post('/settings/smtp-test', authenticateToken, requirePermission('settings:edit'), testSmtp);
 
 // Admin User & Security Management Routes
 router.get('/admin/users', authenticateToken, requirePermission('page:users'), listUsers);

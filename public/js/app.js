@@ -785,12 +785,8 @@ async function loadSettings() {
       if (document.getElementById('smtpSecure')) document.getElementById('smtpSecure').checked = c.secure || false;
     }
 
-    // Email Templates
-    if (s.email_template_verification) {
-      const t = s.email_template_verification;
-      if (document.getElementById('tplVerifySubject')) document.getElementById('tplVerifySubject').value = t.subject || '';
-      if (document.getElementById('tplVerifyBody')) document.getElementById('tplVerifyBody').value = t.body || '';
-    }
+    // Email Templates are loaded separately via loadEmailTemplates()
+    loadEmailTemplates();
 
   } catch (err) {
     console.warn('Load settings notice:', err.message);
@@ -882,35 +878,123 @@ async function handleSaveSmtpSettings(event) {
 }
 
 /**
- * Save Email Templates
+ * Test SMTP Configuration
  */
-async function handleSaveEmailTemplates(event) {
-  event.preventDefault();
-
-  if (!hasPermission('settings:edit')) {
-    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
-    return;
-  }
-
-  const email_template_verification = {
-    subject: document.getElementById('tplVerifySubject').value.trim(),
-    body: document.getElementById('tplVerifyBody').value.trim()
-  };
+async function handleTestSmtp() {
+  const btn = document.querySelector('button[onclick="handleTestSmtp()"]');
+  const oldText = btn.textContent;
+  btn.textContent = '⏳ Envoi en cours...';
+  btn.disabled = true;
 
   try {
-    const res = await secureFetch('/api/v1/settings', {
+    const res = await secureFetch('/api/v1/settings/smtp-test', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors du test SMTP');
+    showToast(data.message, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
+
+/**
+ * Load Email Templates Table
+ */
+async function loadEmailTemplates() {
+  const tbody = document.getElementById('emailTemplatesTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await secureFetch('/api/v1/settings/email-templates', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors du chargement des modèles');
+
+    tbody.innerHTML = '';
+    const templates = data.templates;
+
+    for (const [key, tpl] of Object.entries(templates)) {
+      const isCustomBadge = tpl.isCustom ? '<span class="role-pill user">Modifié</span>' : '<span class="role-pill admin">Par défaut</span>';
+      
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(tpl.name)}</strong><br><small style="color:var(--text-secondary);">${key}</small></td>
+        <td>${escapeHtml(tpl.subject)}</td>
+        <td>${isCustomBadge}</td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm" onclick="openEditTemplateModal('${key}', '${escapeHtml(tpl.subject).replace(/'/g, "\\'")}', '${escapeHtml(tpl.body).replace(/'/g, "\\'")}')">✏️ Éditer</button>
+          ${tpl.isCustom ? `<button class="btn btn-secondary btn-sm" style="color:var(--accent-rose);" onclick="handleResetEmailTemplate('${key}')">🔄 Rétablir defaut</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    console.error('Error loading email templates:', err);
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--accent-rose);">Erreur de chargement.</td></tr>`;
+  }
+}
+
+function openEditTemplateModal(key, subject, body) {
+  // Simple unescape for modal values
+  const unescapeHtml = (str) => {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = (str || '');
+    return txt.value;
+  };
+  
+  document.getElementById('editTemplateKey').value = key;
+  document.getElementById('editTemplateSubject').value = unescapeHtml(subject);
+  document.getElementById('editTemplateBody').value = unescapeHtml(body);
+  openModal('editTemplateModal');
+}
+
+async function handleSaveEmailTemplate(event) {
+  event.preventDefault();
+  const key = document.getElementById('editTemplateKey').value;
+  const subject = document.getElementById('editTemplateSubject').value.trim();
+  const body = document.getElementById('editTemplateBody').value.trim();
+
+  try {
+    const res = await secureFetch(`/api/v1/settings/email-templates/${key}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
       },
-      body: JSON.stringify({ settings: { email_template_verification } })
+      body: JSON.stringify({ subject, body })
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde du modèle');
 
-    showToast('Modèles d\'e-mails enregistrés', 'success');
+    showToast('Modèle mis à jour', 'success');
+    closeModal('editTemplateModal');
+    loadEmailTemplates();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleResetEmailTemplate(key) {
+  if (!confirm('Êtes-vous sûr de vouloir réinitialiser ce modèle à sa version par défaut ? Toutes vos modifications seront perdues.')) return;
+
+  try {
+    const res = await secureFetch(`/api/v1/settings/email-templates/${key}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la réinitialisation');
+
+    showToast('Modèle réinitialisé', 'success');
+    loadEmailTemplates();
   } catch (err) {
     showToast(err.message, 'error');
   }
