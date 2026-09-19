@@ -7,6 +7,7 @@ let loadedScansCache = {};
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
   ensureToastContainer();
+  initLiveLogs();
   if (authToken) {
     fetchProfile();
   } else {
@@ -1577,19 +1578,17 @@ async function confirmEmailVerificationCode(event) {
  * LIVE LOGS WIDGET LOGIC
  * =====================================
  */
-let isLiveLogsMinimized = false;
+let isLiveLogsMinimized = localStorage.getItem('eocheck_livelogs_minimized') === 'true';
 
-function toggleLiveLogs() {
+function initLiveLogs() {
   const box = document.getElementById('liveLogsBox');
   const content = document.getElementById('liveLogsContent');
   const btn = document.getElementById('btnToggleLogs');
   
   if (!box || !content || !btn) return;
 
-  isLiveLogsMinimized = !isLiveLogsMinimized;
-
   if (isLiveLogsMinimized) {
-    box.style.height = '35px'; // Height of the header
+    box.style.height = '35px';
     content.style.display = 'none';
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
     btn.title = "Agrandir";
@@ -1599,6 +1598,12 @@ function toggleLiveLogs() {
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
     btn.title = "Réduire";
   }
+}
+
+function toggleLiveLogs() {
+  isLiveLogsMinimized = !isLiveLogsMinimized;
+  localStorage.setItem('eocheck_livelogs_minimized', isLiveLogsMinimized);
+  initLiveLogs();
 }
 
 /**
