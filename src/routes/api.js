@@ -2,12 +2,13 @@ import express from 'express';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { getCsrfToken, verifyCsrfToken } from '../middleware/csrf.js';
 import { enforceIpFilter } from '../middleware/ipFilter.js';
-import { register, login, getMe } from '../controllers/authController.js';
+import { register, login, getMe, requestEmailVerification, confirmEmailVerification } from '../controllers/authController.js';
 import { createToken, listTokens, revokeToken } from '../controllers/tokenController.js';
 import { createScan, getScan, listScans, getActiveScanLogs, downloadScanPdf } from '../controllers/scanController.js';
-import { listUsers, createUser, createTokenForUser, deleteUser } from '../controllers/userController.js';
-import { getSettings, updateSettings, getLoginLogs, getPublicConfig } from '../controllers/settingsController.js';
+import { listUsers, createUser, createTokenForUser, deleteUser, updateProfile } from '../controllers/userController.js';
+import { getSettings, updateSettings, getLoginLogs, getPublicConfig, listEmailTemplates, updateEmailTemplate, resetEmailTemplate, testSmtp } from '../controllers/settingsController.js';
 import { listGroups, createGroup, updateGroup, deleteGroup, listSystemPermissions } from '../controllers/groupController.js';
+import * as scanProfileController from '../controllers/scanProfileController.js';
 
 const router = express.Router();
 
@@ -23,6 +24,15 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+/**
+ * Scan Profiles API (Types de Scan)
+ */
+router.get('/scan-profiles', authenticateToken, scanProfileController.listProfiles);
+router.get('/scan-profiles/:id', authenticateToken, scanProfileController.getProfile);
+router.post('/scan-profiles', authenticateToken, scanProfileController.createProfile);
+router.put('/scan-profiles/:id', authenticateToken, scanProfileController.updateProfile);
+router.delete('/scan-profiles/:id', authenticateToken, scanProfileController.deleteProfile);
 
 // Endpoint to obtain fresh CSRF token
 router.get('/csrf-token', getCsrfToken);
@@ -41,6 +51,8 @@ router.use(verifyCsrfToken);
 router.post('/auth/register', register);
 router.post('/auth/login', login);
 router.get('/auth/me', authenticateToken, getMe);
+router.post('/auth/verify-email/request', authenticateToken, requestEmailVerification);
+router.post('/auth/verify-email/confirm', authenticateToken, confirmEmailVerification);
 
 // API Token Management Routes (Self)
 router.post('/tokens', authenticateToken, createToken);
@@ -51,12 +63,19 @@ router.delete('/tokens/:id', authenticateToken, revokeToken);
 router.get('/public-config', authenticateToken, getPublicConfig);
 router.get('/settings', authenticateToken, requirePermission('page:settings'), getSettings);
 router.put('/settings', authenticateToken, requirePermission('settings:edit'), updateSettings);
+router.get('/settings/email-templates', authenticateToken, requirePermission('page:settings'), listEmailTemplates);
+router.put('/settings/email-templates/:key', authenticateToken, requirePermission('settings:edit'), updateEmailTemplate);
+router.delete('/settings/email-templates/:key', authenticateToken, requirePermission('settings:edit'), resetEmailTemplate);
+router.post('/settings/smtp-test', authenticateToken, requirePermission('settings:edit'), testSmtp);
 
 // Admin User & Security Management Routes
 router.get('/admin/users', authenticateToken, requirePermission('page:users'), listUsers);
 router.post('/admin/users', authenticateToken, requirePermission('users:manage'), createUser);
 router.post('/admin/users/:userId/tokens', authenticateToken, requirePermission('users:manage'), createTokenForUser);
 router.delete('/admin/users/:id', authenticateToken, requirePermission('users:manage'), deleteUser);
+
+// Self User Route
+router.put('/users/me', authenticateToken, updateProfile);
 
 // Groups Management
 router.get('/admin/groups', authenticateToken, requirePermission('page:groups'), listGroups);

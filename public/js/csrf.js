@@ -73,6 +73,11 @@ async function secureFetch(url, options = {}) {
 
   const fullUrl = url.startsWith('http') ? url : getApiUrl(url);
 
+  // Auto-inject Authorization header if a token exists (from app.js global authToken)
+  if (typeof authToken !== 'undefined' && authToken && !options.headers['Authorization']) {
+    options.headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     if (!activeCsrfToken) {
       await fetchCsrfToken();

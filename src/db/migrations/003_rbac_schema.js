@@ -11,7 +11,11 @@ export function up(db) {
       name TEXT NOT NULL,
       description TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      max_pages INTEGER DEFAULT 0,
+      max_timeout INTEGER DEFAULT 60,
+      max_concurrent INTEGER DEFAULT 1,
+      max_depth INTEGER DEFAULT 3
     );
   `);
 
@@ -41,10 +45,10 @@ export function up(db) {
   const userGroupId = crypto.randomUUID();
 
   const insertGroup = db.prepare(`
-    INSERT INTO user_groups (id, name, description) VALUES (?, ?, ?)
+    INSERT INTO user_groups (id, name, description, max_pages, max_timeout, max_depth) VALUES (?, ?, ?, ?, ?, ?)
   `);
-  insertGroup.run(adminGroupId, 'Administrateurs', 'Accès complet au système');
-  insertGroup.run(userGroupId, 'Utilisateurs standards', 'Accès restreint aux scans');
+  insertGroup.run(adminGroupId, 'Administrateurs', 'Accès complet au système', 1000, 600, 5);
+  insertGroup.run(userGroupId, 'Utilisateurs standards', 'Accès restreint aux scans', 200, 300, 3);
 
   // 5. Migrer les utilisateurs existants
   const users = db.prepare('SELECT id, role FROM users').all();

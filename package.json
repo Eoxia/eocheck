@@ -28,6 +28,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.0.10",
     "puppeteer": "^25.3.0",
     "uuid": "^11.0.5"
   },

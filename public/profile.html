@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Mon Profil</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .verification-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    .verified {
+      background-color: var(--accent-green);
+      color: #fff;
+    }
+    .unverified {
+      background-color: var(--accent-rose);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab" data-permission="page:scans">🔍 Scans</a>
+      <a href="users.html" class="nav-tab" data-permission="page:users">🔑 Clés API</a>
+      <a href="groups.html" class="nav-tab" data-permission="page:groups">🛡️ Groupes & Droits</a>
+      <a href="settings.html" class="nav-tab" data-permission="page:settings">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab" data-permission="page:system">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container" style="max-width: 600px; margin: 2rem auto;">
+
+    <div class="card">
+      <div class="card-title">
+        <span>👤 Mon Profil</span>
+      </div>
+
+      <form onsubmit="handleUpdateProfile(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="profileFirstName">Prénom</label>
+            <input type="text" id="profileFirstName" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="profileLastName">Nom</label>
+            <input type="text" id="profileLastName" class="form-control">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="profilePhone">Numéro de téléphone</label>
+          <input type="tel" id="profilePhone" class="form-control" pattern="^\+?[0-9\s\-\.]{10,20}$" title="Veuillez saisir un numéro de téléphone valide (ex: 06 12 34 56 78 ou +33 6 12 34 56 78)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="profileEmail">
+            Adresse E-mail
+            <span id="emailBadge" class="verification-badge unverified">Non vérifié</span>
+          </label>
+          <input type="email" id="profileEmail" class="form-control" required>
+          <small style="color: var(--text-muted); display: block; margin-top: 4px;">Si vous changez d'adresse, vous devrez la vérifier à nouveau.</small>
+          
+          <div id="verifyEmailBox" style="margin-top: 0.5rem; display: none;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="requestEmailVerificationCode()">
+              Envoyer un code de vérification
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+          💾 Sauvegarder les modifications
+        </button>
+      </form>
+    </div>
+
+  </main>
+
+  <!-- MODAL: Verify Email -->
+  <div id="verifyEmailModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Vérification de l'E-mail</h3>
+        <button class="close-btn" onclick="closeModal('verifyEmailModal')">&times;</button>
+      </div>
+      <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+        Nous avons envoyé un code à 6 chiffres à votre adresse e-mail. Veuillez le saisir ci-dessous.
+      </p>
+      <form onsubmit="confirmEmailVerificationCode(event)">
+        <div class="form-group">
+          <label class="form-label" for="verificationCode">Code de vérification</label>
+          <input type="text" id="verificationCode" class="form-control" required placeholder="123456" pattern="[0-9]{6}" title="6 chiffres">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Vérifier l'E-mail</button>
+      </form>
+    </div>
+  </div>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js?v=1789865973208"></script>
+  <script src="js/app.js?v=1789865973208"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Logic handled in app.js via fetchProfile + specific profile page initializer
+    });
+  </script>
+</body>
+</html>

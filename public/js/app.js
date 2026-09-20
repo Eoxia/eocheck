@@ -7,6 +7,7 @@ let loadedScansCache = {};
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
   ensureToastContainer();
+  initLiveLogs();
   if (authToken) {
     fetchProfile();
   } else {
@@ -78,10 +79,41 @@ async function fetchProfile() {
     renderUserNavbar();
     applyPermissionsUI();
     checkPageAccess(); // Vérifier si l'utilisateur a le droit d'être sur la page actuelle
+    loadGlobalDefaults(); // Load scan defaults if on scans page
+    initProfilePage(); // Load profile data if on profile page
   } catch (err) {
     const errorMsg = err.message === 'Failed to fetch' ? 'Impossible de joindre le serveur API. Vérifiez que le serveur Node.js est bien démarré.' : err.message;
     console.warn('Authentication check failed:', errorMsg);
     logout();
+  }
+}
+
+async function loadGlobalDefaults() {
+  const pagesInput = document.getElementById('scanPages');
+  if (!pagesInput) return; // Not on scans page
+
+  try {
+    const res = await fetch(getApiUrl('/api/v1/public-config'), {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await parseJsonResponse(res);
+    
+    if (data.default_scan_options) {
+      const d = data.default_scan_options;
+      if (document.getElementById('scanPages')) document.getElementById('scanPages').value = d.numPages ?? 0;
+      if (document.getElementById('scanTimeout')) document.getElementById('scanTimeout').value = d.timeout ?? 60;
+      if (document.getElementById('scanDepth')) document.getElementById('scanDepth').value = d.depth ?? 1;
+      if (document.getElementById('scanHeadless')) document.getElementById('scanHeadless').checked = d.headless ?? true;
+      if (document.getElementById('scanCookies')) document.getElementById('scanCookies').checked = d.inspectCookies ?? true;
+      if (document.getElementById('scanTrackers')) document.getElementById('scanTrackers').checked = d.inspectTrackers ?? true;
+      if (document.getElementById('scanScreenshots')) document.getElementById('scanScreenshots').checked = d.takeScreenshots ?? true;
+      
+      const radio = document.querySelector(`input[name="cookieAction"][value="${d.cookieAction}"]`);
+      if (radio) radio.checked = true;
+    }
+  } catch (err) {
+    console.warn('Could not load global defaults', err);
   }
 }
 
@@ -148,9 +180,22 @@ function renderUserNavbar() {
         : currentUser.email;
 
       userNav.innerHTML = `
-        <span class="role-pill ${currentUser.role}">${currentUser.role}</span>
-        <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
-        <button class="btn btn-secondary btn-sm" onclick="logout()">Déconnexion</button>
+        <div class="user-dropdown-container">
+          <div class="user-dropdown-trigger" onclick="toggleUserDropdown(event)">
+            <span class="role-pill ${currentUser.role}">${currentUser.role.toUpperCase()}</span>
+            <span style="font-size: 0.9rem; font-weight: 500;">${escapeHtml(displayName)}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div id="userDropdownMenu" class="user-dropdown-menu">
+            <div class="dropdown-header">
+              <strong style="display: block;">${escapeHtml(displayName)}</strong>
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(currentUser.email)}</span>
+            </div>
+            <a href="profile.html" class="dropdown-item">👤 Mon Profil</a>
+            <hr class="dropdown-divider">
+            <button class="dropdown-item text-danger" onclick="logout()" style="width: 100%; text-align: left; background: transparent; border: none; font-size: inherit; cursor: pointer;">🚪 Déconnexion</button>
+          </div>
+        </div>
       `;
     }
 
@@ -164,6 +209,7 @@ function renderUserNavbar() {
       }
     }
   } else {
+    if (navTabs) navTabs.style.display = 'none';
     if (userNav) {
       userNav.innerHTML = `<a href="login.html" class="btn btn-primary btn-sm">Se connecter</a>`;
     }
@@ -174,7 +220,7 @@ function renderUserNavbar() {
  * Switch Settings Page Sub-Tabs
  */
 function switchSettingsTab(tabId) {
-  const tabs = ['settingsUsersTab', 'settingsScanTab', 'settingsSecurityTab'];
+  const tabs = ['settingsUsersTab', 'settingsScanTab', 'settingsSecurityTab', 'settingsDefaultsTab', 'settingsEmailTab'];
   tabs.forEach(t => {
     const el = document.getElementById(t);
     if (el) el.style.display = (t === tabId) ? 'block' : 'none';
@@ -183,7 +229,9 @@ function switchSettingsTab(tabId) {
   const btnMap = {
     'settingsUsersTab': 'btnTabUsers',
     'settingsScanTab': 'btnTabScanParams',
-    'settingsSecurityTab': 'btnTabSecurity'
+    'settingsSecurityTab': 'btnTabSecurity',
+    'settingsDefaultsTab': 'btnTabDefaults',
+    'settingsEmailTab': 'btnTabEmail'
   };
 
   Object.entries(btnMap).forEach(([t, btnId]) => {
@@ -200,7 +248,7 @@ function switchSettingsTab(tabId) {
   });
 
   if (tabId === 'settingsUsersTab') loadAdminUsers();
-  if (tabId === 'settingsScanTab' || tabId === 'settingsSecurityTab') loadSettings();
+  if (tabId === 'settingsScanTab' || tabId === 'settingsSecurityTab' || tabId === 'settingsDefaultsTab' || tabId === 'settingsEmailTab') loadSettings();
   if (tabId === 'settingsSecurityTab') loadLoginLogs();
 }
 
@@ -536,13 +584,12 @@ async function handleCreateScan(event) {
   }
 
   const url = document.getElementById('scanUrl').value;
-  const numPages = parseInt(document.getElementById('scanPages').value, 10);
-  const timeout = parseInt(document.getElementById('scanTimeout').value, 10);
-  const depth = parseInt(document.getElementById('scanDepth').value, 10);
-  const headless = document.getElementById('scanHeadless').checked;
-  const inspectCookies = document.getElementById('scanCookies').checked;
-  const inspectTrackers = document.getElementById('scanTrackers').checked;
-  const takeScreenshots = document.getElementById('scanScreenshots') ? document.getElementById('scanScreenshots').checked : true;
+  const profileId = document.getElementById('scanProfileId').value;
+  
+  if (!profileId) {
+    showToast('Veuillez sélectionner un type de scan.', 'error');
+    return;
+  }
 
   try {
     const res = await secureFetch('/api/v1/scans', {
@@ -553,7 +600,7 @@ async function handleCreateScan(event) {
       },
       body: JSON.stringify({
         url,
-        options: { numPages, timeout, depth, headless, inspectCookies, inspectTrackers, takeScreenshots }
+        profile_id: profileId
       })
     });
 
@@ -637,6 +684,7 @@ async function viewScanDetails(scanId) {
           <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
           <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
           <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
+          <span>👆 <b>Action Auto Cookies :</b> ${opts.cookieAction === 'accept' ? 'Accepter tous' : (opts.cookieAction === 'reject' ? 'Refuser tous' : 'Ignorer')}</span>
         </div>
       </div>
 
@@ -656,7 +704,9 @@ async function viewScanDetails(scanId) {
             ${screenshots.map(s => `
               <div class="screenshot-card" style="cursor: pointer;" onclick="openImageLightbox('${s.preview}', '${escapeHtml(s.title)}')">
                 <div style="font-size: 0.82rem; font-weight: 600; color: #fff; word-break: break-all;">${escapeHtml(s.title || s.url)}</div>
-                <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">${escapeHtml(s.url)}</div>
+                <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.4rem; word-break: break-all;">
+                  <a href="${escapeHtml(s.url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;" onclick="event.stopPropagation()">${escapeHtml(s.url)}</a>
+                </div>
                 <img src="${s.preview.startsWith('http') ? s.preview : getApiUrl('/' + s.preview).replace('/api/v1/', '/')}" alt="${escapeHtml(s.title)}" class="screenshot-img" />
               </div>
             `).join('')}
@@ -719,8 +769,301 @@ async function loadSettings() {
 
     const blacklistText = document.getElementById('ipBlacklistText');
     if (blacklistText && Array.isArray(s.ip_blacklist)) blacklistText.value = s.ip_blacklist.join('\n');
+
+    // Default scan options
+    if (s.default_scan_options) {
+      const d = s.default_scan_options;
+      if (document.getElementById('defPages')) document.getElementById('defPages').value = d.numPages ?? 0;
+      if (document.getElementById('defTimeout')) document.getElementById('defTimeout').value = d.timeout ?? 60;
+      if (document.getElementById('defDepth')) document.getElementById('defDepth').value = d.depth ?? 1;
+      if (document.getElementById('defHeadless')) document.getElementById('defHeadless').checked = d.headless ?? true;
+      if (document.getElementById('defCookies')) document.getElementById('defCookies').checked = d.inspectCookies ?? true;
+      if (document.getElementById('defTrackers')) document.getElementById('defTrackers').checked = d.inspectTrackers ?? true;
+      if (document.getElementById('defScreenshots')) document.getElementById('defScreenshots').checked = d.takeScreenshots ?? true;
+      
+      const radio = document.querySelector(`input[name="defCookieAction"][value="${d.cookieAction}"]`);
+      if (radio) radio.checked = true;
+    }
+
+    // SMTP Config
+    if (s.smtp_config) {
+      const c = s.smtp_config;
+      if (document.getElementById('smtpHost')) document.getElementById('smtpHost').value = c.host || '';
+      if (document.getElementById('smtpPort')) document.getElementById('smtpPort').value = c.port || 587;
+      if (document.getElementById('smtpUser')) document.getElementById('smtpUser').value = c.user || '';
+      if (document.getElementById('smtpPass')) document.getElementById('smtpPass').value = c.pass || '';
+      if (document.getElementById('smtpFrom')) document.getElementById('smtpFrom').value = c.from || '';
+      if (document.getElementById('smtpSecure')) document.getElementById('smtpSecure').checked = c.secure || false;
+    }
+
+    // Email Templates are loaded separately via loadEmailTemplates()
+    loadEmailTemplates();
+
   } catch (err) {
     console.warn('Load settings notice:', err.message);
+  }
+}
+
+/**
+ * Save Scan Defaults
+ */
+async function handleSaveDefaults(event) {
+  event.preventDefault();
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const defs = {
+    numPages: parseInt(document.getElementById('defPages').value, 10),
+    timeout: parseInt(document.getElementById('defTimeout').value, 10),
+    depth: parseInt(document.getElementById('defDepth').value, 10),
+    headless: document.getElementById('defHeadless').checked,
+    inspectCookies: document.getElementById('defCookies').checked,
+    inspectTrackers: document.getElementById('defTrackers').checked,
+    takeScreenshots: document.getElementById('defScreenshots').checked,
+    cookieAction: document.querySelector('input[name="defCookieAction"]:checked').value
+  };
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        settings: {
+          default_scan_options: defs
+        }
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Valeurs par défaut enregistrées', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Save SMTP Settings
+ */
+async function handleSaveSmtpSettings(event) {
+  event.preventDefault();
+
+  if (!hasPermission('settings:edit')) {
+    showToast('Vous n\'avez pas la permission de modifier les réglages.', 'error');
+    return;
+  }
+
+  const smtp_config = {
+    host: document.getElementById('smtpHost').value.trim(),
+    port: parseInt(document.getElementById('smtpPort').value, 10),
+    user: document.getElementById('smtpUser').value.trim(),
+    pass: document.getElementById('smtpPass').value.trim(),
+    from: document.getElementById('smtpFrom').value.trim(),
+    secure: document.getElementById('smtpSecure').checked
+  };
+
+  try {
+    const res = await secureFetch('/api/v1/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ settings: { smtp_config } })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Configuration SMTP enregistrée', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * Test SMTP Configuration
+ */
+async function handleTestSmtp() {
+  const btn = document.querySelector('button[onclick="handleTestSmtp()"]');
+  const oldText = btn.textContent;
+  btn.textContent = '⏳ Envoi en cours...';
+  btn.disabled = true;
+
+  try {
+    const res = await secureFetch('/api/v1/settings/smtp-test', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors du test SMTP');
+    showToast(data.message, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
+
+/**
+ * Load Email Templates Table
+ */
+async function loadEmailTemplates() {
+  const tbody = document.getElementById('emailTemplatesTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await secureFetch('/api/v1/settings/email-templates', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors du chargement des modèles');
+
+    tbody.innerHTML = '';
+    const templates = data.templates;
+
+    for (const [key, tpl] of Object.entries(templates)) {
+      const isCustomBadge = tpl.isCustom ? '<span class="role-pill user">Modifié</span>' : '<span class="role-pill admin">Par défaut</span>';
+      
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(tpl.name)}</strong><br><small style="color:var(--text-secondary);">${key}</small></td>
+        <td>${escapeHtml(tpl.subject)}</td>
+        <td>${isCustomBadge}</td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm" onclick="openEditTemplateModal('${key}', '${escapeHtml(tpl.subject).replace(/'/g, "\\'")}', '${escapeHtml(tpl.body).replace(/'/g, "\\'")}')">✏️ Éditer</button>
+          ${tpl.isCustom ? `<button class="btn btn-secondary btn-sm" style="color:var(--accent-rose);" onclick="handleResetEmailTemplate('${key}')">🔄 Rétablir defaut</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    console.error('Error loading email templates:', err);
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--accent-rose);">Erreur de chargement.</td></tr>`;
+  }
+}
+
+function switchTplEditorTab(tab) {
+  const btnHtml = document.getElementById('btnTplEditorHtml');
+  const btnPreview = document.getElementById('btnTplEditorPreview');
+  const htmlContainer = document.getElementById('tplEditorHtmlContainer');
+  const previewContainer = document.getElementById('tplEditorPreviewContainer');
+  const textarea = document.getElementById('editTemplateBody');
+
+  if (tab === 'html') {
+    btnHtml.style.background = 'var(--accent-indigo)';
+    btnHtml.style.color = '#fff';
+    btnHtml.style.borderColor = 'var(--accent-indigo)';
+    
+    btnPreview.style.background = 'transparent';
+    btnPreview.style.color = 'var(--text-secondary)';
+    btnPreview.style.borderColor = 'var(--border-color)';
+
+    htmlContainer.style.display = 'block';
+    previewContainer.style.display = 'none';
+  } else {
+    btnPreview.style.background = 'var(--accent-indigo)';
+    btnPreview.style.color = '#fff';
+    btnPreview.style.borderColor = 'var(--accent-indigo)';
+    
+    btnHtml.style.background = 'transparent';
+    btnHtml.style.color = 'var(--text-secondary)';
+    btnHtml.style.borderColor = 'var(--border-color)';
+
+    htmlContainer.style.display = 'none';
+    previewContainer.style.display = 'block';
+    
+    // Inject HTML content into preview
+    previewContainer.innerHTML = textarea.value || '<p style="color:#999; font-style:italic;">Vide</p>';
+  }
+}
+
+function openEditTemplateModal(key, subject, body) {
+  // Simple unescape for modal values
+  const unescapeHtml = (str) => {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = (str || '');
+    return txt.value;
+  };
+  
+  // Mapping des variables par modèle
+  const variablesMap = {
+    'tpl_account_created': ['__FIRSTNAME__', '__LASTNAME__', '__EMAIL__'],
+    'tpl_scan_finished': ['__SCAN_URL__', '__REPORT_LINK__'],
+    'tpl_send_report': ['__SCAN_URL__'],
+    'tpl_password_reset': ['__RESET_LINK__'],
+    'tpl_verify_email': ['__CODE__'],
+    'tpl_smtp_test': []
+  };
+
+  const vars = variablesMap[key] || [];
+  const helpDiv = document.getElementById('tplVariablesHelp');
+  
+  if (vars.length > 0) {
+    helpDiv.innerHTML = vars.map(v => `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); cursor: copy;" onclick="navigator.clipboard.writeText('${v}'); showToast('${v} copié !', 'success')">${v}</span>`).join('');
+  } else {
+    helpDiv.innerHTML = '<span style="font-style: italic; color: #666;">Aucune variable disponible pour ce modèle.</span>';
+  }
+
+  document.getElementById('editTemplateKey').value = key;
+  document.getElementById('editTemplateSubject').value = unescapeHtml(subject);
+  document.getElementById('editTemplateBody').value = unescapeHtml(body);
+  
+  switchTplEditorTab('preview');
+  openModal('editTemplateModal');
+}
+
+async function handleSaveEmailTemplate(event) {
+  event.preventDefault();
+  const key = document.getElementById('editTemplateKey').value;
+  const subject = document.getElementById('editTemplateSubject').value.trim();
+  const body = document.getElementById('editTemplateBody').value.trim();
+
+  try {
+    const res = await secureFetch(`/api/v1/settings/email-templates/${key}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ subject, body })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde du modèle');
+
+    showToast('Modèle mis à jour', 'success');
+    closeModal('editTemplateModal');
+    loadEmailTemplates();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleResetEmailTemplate(key) {
+  if (!confirm('Êtes-vous sûr de vouloir réinitialiser ce modèle à sa version par défaut ? Toutes vos modifications seront perdues.')) return;
+
+  try {
+    const res = await secureFetch(`/api/v1/settings/email-templates/${key}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la réinitialisation');
+
+    showToast('Modèle réinitialisé', 'success');
+    loadEmailTemplates();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 
@@ -1126,3 +1469,370 @@ function formatDate(isoStr) {
   const d = new Date(isoStr);
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
+
+/**
+ * =====================================
+ * PROFILE LOGIC
+ * =====================================
+ */
+
+function initProfilePage() {
+  if (!document.getElementById('profileFirstName')) return; // Not on profile page
+
+  document.getElementById('profileFirstName').value = currentUser.first_name || '';
+  document.getElementById('profileLastName').value = currentUser.last_name || '';
+  document.getElementById('profilePhone').value = currentUser.phone || '';
+  document.getElementById('profileEmail').value = currentUser.email || '';
+
+  const badge = document.getElementById('emailBadge');
+  const verifyBox = document.getElementById('verifyEmailBox');
+
+  if (currentUser.email_verified) {
+    badge.textContent = 'Vérifié';
+    badge.className = 'verification-badge verified';
+    verifyBox.style.display = 'none';
+  } else {
+    badge.textContent = 'Non vérifié';
+    badge.className = 'verification-badge unverified';
+    verifyBox.style.display = 'block';
+  }
+}
+
+async function handleUpdateProfile(event) {
+  event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.textContent = 'Sauvegarde...';
+  btn.disabled = true;
+
+  try {
+    const res = await secureFetch('/api/v1/users/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({
+        first_name: document.getElementById('profileFirstName').value.trim(),
+        last_name: document.getElementById('profileLastName').value.trim(),
+        phone: document.getElementById('profilePhone').value.trim(),
+        email: document.getElementById('profileEmail').value.trim()
+      })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+
+    showToast('Profil mis à jour avec succès', 'success');
+    await fetchProfile(); // Refresh current user
+    initProfilePage(); // Re-render
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+async function requestEmailVerificationCode() {
+  try {
+    const res = await secureFetch('/api/v1/auth/verify-email/request', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur lors de la demande de code');
+
+    showToast('Code de vérification envoyé à votre adresse e-mail', 'success');
+    openModal('verifyEmailModal');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function confirmEmailVerificationCode(event) {
+  event.preventDefault();
+  const code = document.getElementById('verificationCode').value.trim();
+  
+  try {
+    const res = await secureFetch('/api/v1/auth/verify-email/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({ code })
+    });
+
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Erreur de vérification');
+
+    showToast('E-mail vérifié avec succès !', 'success');
+    closeModal('verifyEmailModal');
+    await fetchProfile();
+    initProfilePage();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/**
+ * =====================================
+ * LIVE LOGS WIDGET LOGIC
+ * =====================================
+ */
+let isLiveLogsMinimized = localStorage.getItem('eocheck_livelogs_minimized') === 'true';
+
+function initLiveLogs() {
+  const box = document.getElementById('liveLogsBox');
+  const content = document.getElementById('liveLogsContent');
+  const btn = document.getElementById('btnToggleLogs');
+  
+  if (!box || !content || !btn) return;
+
+  if (isLiveLogsMinimized) {
+    box.style.height = '35px';
+    content.style.display = 'none';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+    btn.title = "Agrandir";
+  } else {
+    box.style.height = '300px';
+    content.style.display = 'flex';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    btn.title = "Réduire";
+  }
+}
+
+function toggleLiveLogs() {
+  isLiveLogsMinimized = !isLiveLogsMinimized;
+  localStorage.setItem('eocheck_livelogs_minimized', isLiveLogsMinimized);
+  initLiveLogs();
+}
+
+/**
+ * =====================================
+ * USER DROPDOWN LOGIC
+ * =====================================
+ */
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('userDropdownMenu');
+  if (menu) {
+    menu.classList.toggle('show');
+  }
+}
+
+// Close the dropdown if the user clicks outside of it
+window.addEventListener('click', function(event) {
+  const menu = document.getElementById('userDropdownMenu');
+  const trigger = document.querySelector('.user-dropdown-trigger');
+  
+  if (menu && menu.classList.contains('show')) {
+    if (!menu.contains(event.target) && !trigger.contains(event.target)) {
+      menu.classList.remove('show');
+    }
+  }
+});
+
+
+// --- SCAN PROFILES LOGIC ---
+
+let allProfilesCache = [];
+
+async function loadScanProfiles() {
+  const tbody = document.getElementById('scanProfilesTableBody');
+  if (!tbody) return;
+  try {
+    const res = await secureFetch('/api/v1/scan-profiles', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Error loading profiles');
+
+    allProfilesCache = data.profiles || [];
+    tbody.innerHTML = '';
+    
+    if (allProfilesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);">Aucun profil de scan trouvé.</td></tr>';
+      return;
+    }
+
+    allProfilesCache.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(p.label)}</strong></td>
+        <td>${escapeHtml(p.description || '')}</td>
+        <td>${p.fk_usergroup ? 'Groupe ID:' + p.fk_usergroup : 'Personnel'}</td>
+        <td>${p.max_pages}</td>
+        <td>${p.timeout_secs}s</td>
+        <td>${new Date(p.datec).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="editScanProfile(${p.rowid})">Modifier</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteScanProfile(${p.rowid})">Supprimer</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (error) {
+    console.error('Error loading profiles:', error);
+    showToast(error.message, 'error');
+  }
+}
+
+async function loadScanProfilesDropdown() {
+  const select = document.getElementById('scanProfileId');
+  if (!select) return;
+  try {
+    const res = await secureFetch('/api/v1/scan-profiles', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error('Error loading profiles');
+    allProfilesCache = data.profiles || [];
+    
+    select.innerHTML = '<option value="">-- Sélectionnez un type de scan --</option>';
+    allProfilesCache.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.rowid;
+      opt.textContent = p.label;
+      select.appendChild(opt);
+    });
+  } catch (error) {
+    console.error('Error loading profiles dropdown:', error);
+  }
+}
+
+function renderSelectedProfileSummary() {
+  const select = document.getElementById('scanProfileId');
+  const summaryBox = document.getElementById('scanProfileSummaryBox');
+  if (!select || !summaryBox) return;
+
+  const profileId = select.value;
+  if (!profileId) {
+    summaryBox.style.display = 'none';
+    return;
+  }
+
+  const profile = allProfilesCache.find(p => p.rowid == profileId);
+  if (!profile) return;
+
+  summaryBox.style.display = 'block';
+  summaryBox.innerHTML = `
+    <div style="font-weight: 600; color: var(--accent-cyan); margin-bottom: 5px;">${escapeHtml(profile.label)}</div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">${escapeHtml(profile.description || '')}</div>
+    <div style="display: flex; gap: 15px; font-size: 0.8rem; color: var(--text-dim);">
+      <span><strong>Pages:</strong> ${profile.max_pages}</span>
+      <span><strong>Profondeur:</strong> ${profile.max_depth}</span>
+      <span><strong>Timeout:</strong> ${profile.timeout_secs}s</span>
+      <span><strong>Headless:</strong> ${profile.headless ? 'Oui' : 'Non'}</span>
+    </div>
+  `;
+}
+
+function openScanProfileModal() {
+  document.getElementById('profileRowid').value = '';
+  document.getElementById('profileLabel').value = '';
+  document.getElementById('profileDesc').value = '';
+  document.getElementById('profilePages').value = 100;
+  document.getElementById('profileTimeout').value = 300;
+  document.getElementById('profileDepth').value = 3;
+  document.getElementById('profileHeadless').checked = true;
+  document.getElementById('profileCookies').checked = true;
+  document.getElementById('profileTrackers').checked = true;
+  document.getElementById('profileScreenshots').checked = false;
+  
+  const radioNone = document.querySelector('input[name="profileCookieAction"][value="none"]');
+  if (radioNone) radioNone.checked = true;
+  
+  openModal('scanProfileModal');
+}
+
+function editScanProfile(id) {
+  const profile = allProfilesCache.find(p => p.rowid === id);
+  if (!profile) return;
+
+  document.getElementById('profileRowid').value = profile.rowid;
+  document.getElementById('profileLabel').value = profile.label;
+  document.getElementById('profileDesc').value = profile.description || '';
+  document.getElementById('profilePages').value = profile.max_pages;
+  document.getElementById('profileTimeout').value = profile.timeout_secs;
+  document.getElementById('profileDepth').value = profile.max_depth;
+  
+  document.getElementById('profileHeadless').checked = !!profile.headless;
+  document.getElementById('profileCookies').checked = !!profile.inspect_cookies;
+  document.getElementById('profileTrackers').checked = !!profile.detect_trackers;
+  document.getElementById('profileScreenshots').checked = !!profile.capture_images;
+  
+  const actionRadios = document.querySelectorAll('input[name="profileCookieAction"]');
+  actionRadios.forEach(r => {
+    if (r.value === profile.cookie_action) r.checked = true;
+  });
+
+  openModal('scanProfileModal');
+}
+
+async function handleSaveScanProfile(event) {
+  event.preventDefault();
+  const rowid = document.getElementById('profileRowid').value;
+  const label = document.getElementById('profileLabel').value;
+  const description = document.getElementById('profileDesc').value;
+  const max_pages = parseInt(document.getElementById('profilePages').value, 10);
+  const timeout_secs = parseInt(document.getElementById('profileTimeout').value, 10);
+  const max_depth = parseInt(document.getElementById('profileDepth').value, 10);
+  
+  const headless = document.getElementById('profileHeadless').checked ? 1 : 0;
+  const inspect_cookies = document.getElementById('profileCookies').checked ? 1 : 0;
+  const detect_trackers = document.getElementById('profileTrackers').checked ? 1 : 0;
+  const capture_images = document.getElementById('profileScreenshots').checked ? 1 : 0;
+  
+  const cookieActionEl = document.querySelector('input[name="profileCookieAction"]:checked');
+  const cookie_action = cookieActionEl ? cookieActionEl.value : 'none';
+  
+  const fk_usergroup = document.getElementById('profileOwner').value || null;
+
+  const payload = {
+    label, description, max_pages, timeout_secs, max_depth,
+    headless, inspect_cookies, detect_trackers, capture_images, cookie_action,
+    fk_usergroup
+  };
+
+  try {
+    const url = rowid ? `/api/v1/scan-profiles/${rowid}` : '/api/v1/scan-profiles';
+    const method = rowid ? 'PUT' : 'POST';
+    
+    const res = await secureFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await parseJsonResponse(res);
+      throw new Error(data.error || 'Erreur lors de la sauvegarde du profil');
+    }
+    
+    showToast('Profil enregistré !', 'success');
+    closeModal('scanProfileModal');
+    loadScanProfiles();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function deleteScanProfile(id) {
+  if (!confirm('Voulez-vous vraiment supprimer ce profil ?')) return;
+  try {
+    const res = await secureFetch(`/api/v1/scan-profiles/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Erreur de suppression');
+    showToast('Profil supprimé', 'success');
+    loadScanProfiles();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+// Hook into loadScans to also load profiles for dropdown if on scans page
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.pathname.endsWith('scans.html') || window.location.pathname === '/') {
+    setTimeout(loadScanProfilesDropdown, 500);
+  }
+  if (window.location.pathname.endsWith('scan-profiles.html')) {
+    setTimeout(loadScanProfiles, 500);
+  }
+});

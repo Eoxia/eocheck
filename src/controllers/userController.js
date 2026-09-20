@@ -149,3 +149,39 @@ export function deleteUser(req, res) {
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to delete user' });
   }
 }
+
+/**
+ * Self: Update profile
+ */
+export function updateProfile(req, res) {
+  try {
+    const { first_name, last_name, phone, email } = req.body;
+    
+    // Si l'utilisateur change d'e-mail, on doit s'assurer qu'il n'est pas déjà pris
+    if (email && email !== req.user.email) {
+      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      if (existing) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Cette adresse e-mail est déjà utilisée.' });
+      }
+      
+      // Mise à jour complète avec changement d'e-mail : on désactive la vérification
+      db.prepare(`
+        UPDATE users 
+        SET first_name = ?, last_name = ?, phone = ?, email = ?, email_verified = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(first_name || '', last_name || '', phone || '', email, req.user.id);
+    } else {
+      // Simple mise à jour sans toucher à l'e-mail
+      db.prepare(`
+        UPDATE users 
+        SET first_name = ?, last_name = ?, phone = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(first_name || '', last_name || '', phone || '', req.user.id);
+    }
+
+    return res.json({ message: 'Profil mis à jour avec succès' });
+  } catch (error) {
+    console.error('[User Controller] Update profile error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update profile' });
+  }
+}

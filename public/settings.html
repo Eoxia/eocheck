@@ -35,6 +35,8 @@
     <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem;">
       <button class="btn btn-secondary" id="btnTabUsers" onclick="switchSettingsTab('settingsUsersTab')">👥 Utilisateurs</button>
       <button class="btn btn-secondary" id="btnTabSecurity" onclick="switchSettingsTab('settingsSecurityTab')">🔒 Sécurité & IP</button>
+      <button class="btn btn-secondary" id="btnTabDefaults" onclick="switchSettingsTab('settingsDefaultsTab')">🎛️ Valeurs par défaut</button>
+      <button class="btn btn-secondary" id="btnTabEmail" onclick="switchSettingsTab('settingsEmailTab')">✉️ Réglages E-mail</button>
     </div>
 
     <!-- SETTINGS TAB 1: Utilisateurs -->
@@ -120,7 +122,162 @@
       </div>
     </div>
 
+    <!-- SETTINGS TAB 4: Valeurs par défaut -->
+    <div id="settingsDefaultsTab" class="card" style="display: none;">
+      <div class="card-title">
+        <span>🎛️ Valeurs de Scan par Défaut</span>
+      </div>
+      <form onsubmit="handleSaveDefaults(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="defPages">Nombre de pages secondaires (crawl)</label>
+            <input type="number" id="defPages" class="form-control" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="defTimeout">Timeout (secondes)</label>
+            <input type="number" id="defTimeout" class="form-control" value="60" min="10">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="defDepth">Profondeur (crawl)</label>
+            <input type="number" id="defDepth" class="form-control" value="1" min="1">
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-bottom: 1.25rem;">
+          <label class="checkbox-group">
+            <input type="checkbox" id="defHeadless" checked> Mode Headless (Navigateur masqué)
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="defCookies" checked> Inspecter les Cookies
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="defTrackers" checked> Détecter les Traqueurs & Analytics
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="defScreenshots" checked> 📸 Captures d'écran
+          </label>
+        </div>
+
+        <div class="form-row" style="margin-bottom: 1.25rem; align-items: center; gap: 1rem;">
+          <span style="font-size: 0.9rem; color: var(--text-secondary);">Action sur le bandeau de cookies :</span>
+          <label class="checkbox-group" style="margin: 0;">
+            <input type="radio" name="defCookieAction" value="none" checked> Ignorer
+          </label>
+          <label class="checkbox-group" style="margin: 0;">
+            <input type="radio" name="defCookieAction" value="accept"> Accepter tous les cookies
+          </label>
+          <label class="checkbox-group" style="margin: 0;">
+            <input type="radio" name="defCookieAction" value="reject"> Refuser tous les cookies
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">💾 Enregistrer les valeurs par défaut</button>
+      </form>
+    </div>
+
+    <!-- SETTINGS TAB 5: Email Settings -->
+    <div id="settingsEmailTab" class="card" style="display: none;">
+      <div class="card-title">
+        <span>✉️ Configuration SMTP & E-mails</span>
+      </div>
+      
+      <form onsubmit="handleSaveSmtpSettings(event)" style="margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color);">
+        <h3 style="margin-bottom: 1rem;">Serveur SMTP</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpHost">Hôte SMTP (ex: smtp.mailtrap.io)</label>
+            <input type="text" id="smtpHost" class="form-control" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="smtpPort">Port (ex: 587)</label>
+            <input type="number" id="smtpPort" class="form-control" value="587">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpUser">Utilisateur</label>
+            <input type="text" id="smtpUser" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="smtpPass">Mot de passe</label>
+            <input type="password" id="smtpPass" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="smtpFrom">Adresse expéditeur</label>
+            <input type="email" id="smtpFrom" class="form-control" placeholder="noreply@eocheck.com">
+          </div>
+          <label class="checkbox-group" style="margin-top: 1.5rem;">
+            <input type="checkbox" id="smtpSecure"> Connexion sécurisée (SSL/TLS - Port 465)
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Sauvegarder SMTP</button>
+        <button type="button" class="btn btn-secondary" onclick="handleTestSmtp()" style="margin-left: 1rem;">✉️ Envoyer un e-mail de test</button>
+      </form>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">Modèles d'E-mails</h3>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Variable de substitution : <code>__NOMDELAVARIABLE__</code></p>
+      </div>
+
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Modèle</th>
+              <th>Sujet</th>
+              <th>Statut</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="emailTemplatesTableBody">
+            <!-- Templates will be loaded here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
+
+  <!-- MODAL: Edit Email Template -->
+  <div id="editTemplateModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Modifier le Modèle</h3>
+        <button class="close-btn" onclick="closeModal('editTemplateModal')">&times;</button>
+      </div>
+      <form onsubmit="handleSaveEmailTemplate(event)">
+        <input type="hidden" id="editTemplateKey">
+        
+        <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 4px; padding: 10px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+          <strong style="color: var(--accent-indigo);">💡 Variables de substitution :</strong>
+          <div id="tplVariablesHelp" style="margin-top: 4px; font-family: monospace; display: flex; flex-wrap: wrap; gap: 6px;">
+            <!-- Variables injected dynamically -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="editTemplateSubject">Sujet</label>
+          <input type="text" id="editTemplateSubject" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <div style="display: flex; margin-bottom: 0;">
+            <div style="display: flex; gap: 4px;">
+              <button type="button" id="btnTplEditorPreview" onclick="switchTplEditorTab('preview')" style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-bottom: none; padding: 6px 12px; font-size: 0.85rem; border-radius: 4px 4px 0 0; cursor: pointer;">Rendu Visuel</button>
+              <button type="button" id="btnTplEditorHtml" onclick="switchTplEditorTab('html')" style="background: var(--accent-indigo); color: #fff; border: 1px solid var(--accent-indigo); padding: 6px 12px; font-size: 0.85rem; border-radius: 4px 4px 0 0; cursor: pointer;">Source HTML</button>
+            </div>
+          </div>
+          <div id="tplEditorHtmlContainer">
+            <textarea id="editTemplateBody" class="form-control" rows="8" required style="border-top-left-radius: 0;"></textarea>
+          </div>
+          <div id="tplEditorPreviewContainer" class="form-control" style="display: none; background: #fff; color: #333; padding: 1rem; min-height: 180px; max-height: 300px; overflow-y: auto; border-top-left-radius: 0;">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Enregistrer le modèle</button>
+      </form>
+    </div>
+  </div>
 
   <!-- MODAL: Create User / Admin Account -->
   <div id="createUserModal" class="modal-backdrop">
@@ -164,8 +321,8 @@
     EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
   </footer>
 
-  <script src="js/csrf.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/csrf.js?v=1789865973208"></script>
+  <script src="js/app.js?v=1789865973208"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       switchSettingsTab('settingsUsersTab');
