@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOCheck - Profils de Scan</title>
+  <meta name="description" content="Gestion des profils et modèles de scan">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="index.html" class="brand">
+      <span>🛡️ EOCheck</span>
+      <span class="brand-badge">eoxia.com</span>
+    </a>
+
+    <div class="nav-tabs" id="navTabs">
+      <a href="scans.html" class="nav-tab">🔍 Scans</a>
+      <a href="scan-profiles.html" class="nav-tab active">📑 Profils de Scan</a>
+      <a href="users.html" class="nav-tab">🔑 Clés API</a>
+      <a href="groups.html" class="nav-tab">🛡️ Groupes & Droits</a>
+      <a href="settings.html" class="nav-tab">⚙️ Réglages Général</a>
+      <a href="system.html" class="nav-tab">📡 Docs API</a>
+    </div>
+
+    <div class="user-nav" id="userNav">
+      <!-- User info dynamically inserted here -->
+    </div>
+  </nav>
+
+  <main class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <h2 style="margin: 0; font-size: 1.5rem; font-weight: 600;">Types de Scans (Profils)</h2>
+      <button class="btn btn-primary" onclick="openScanProfileModal()">+ Nouveau Profil</button>
+    </div>
+
+    <!-- Profiles List -->
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nom du Profil</th>
+              <th>Description</th>
+              <th>Propriétaire</th>
+              <th>Pages max</th>
+              <th>Timeout</th>
+              <th>Créé le</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scanProfilesTableBody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-dim);">Chargement des profils...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL: Scan Profile Editor -->
+  <div id="scanProfileModal" class="modal-backdrop">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="profileModalTitle">Créer un Profil</h3>
+        <button class="close-btn" onclick="closeModal('scanProfileModal')">&times;</button>
+      </div>
+      <form onsubmit="handleSaveScanProfile(event)">
+        <input type="hidden" id="profileRowid">
+        
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="profileLabel">Nom du Profil</label>
+            <input type="text" id="profileLabel" class="form-control" required>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="profileOwner">Propriété (Groupe optionnel)</label>
+            <select id="profileOwner" class="form-control">
+              <option value="">Personnel (Uniquement pour moi)</option>
+              <!-- Groupes injectés ici -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="profileDesc">Description</label>
+          <input type="text" id="profileDesc" class="form-control" placeholder="Objectif de ce type de scan...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="profilePages">Pages secondaires (max)</label>
+            <input type="number" id="profilePages" class="form-control" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="profileTimeout">Timeout (s)</label>
+            <input type="number" id="profileTimeout" class="form-control" value="60" min="10">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="profileDepth">Profondeur</label>
+            <input type="number" id="profileDepth" class="form-control" value="1" min="1">
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-bottom: 1rem;">
+          <label class="checkbox-group">
+            <input type="checkbox" id="profileHeadless" checked> Headless
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="profileCookies" checked> Cookies
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="profileTrackers" checked> Traqueurs
+          </label>
+          <label class="checkbox-group">
+            <input type="checkbox" id="profileScreenshots"> Captures
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Action sur le bandeau cookies</label>
+          <div style="display: flex; gap: 1rem;">
+            <label class="checkbox-group" style="margin: 0;"><input type="radio" name="profileCookieAction" value="none" checked> Ignorer</label>
+            <label class="checkbox-group" style="margin: 0;"><input type="radio" name="profileCookieAction" value="accept"> Accepter</label>
+            <label class="checkbox-group" style="margin: 0;"><input type="radio" name="profileCookieAction" value="reject"> Refuser</label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Enregistrer le Profil</button>
+      </form>
+    </div>
+  </div>
+
+  <footer>
+    EOCheck &copy; 2026 - Plateforme de Scan & Gestion d'API Eoxia | eocheck.eoxia.com
+  </footer>
+
+  <script src="js/csrf.js?v=1789865973208"></script>
+  <script src="js/app.js?v=1789865973208"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      let attempts = 0;
+      while (!currentUser && attempts < 20) {
+        await new Promise(r => setTimeout(r, 50));
+        attempts++;
+      }
+      loadScanProfiles();
+    });
+  </script>
+</body>
+</html>

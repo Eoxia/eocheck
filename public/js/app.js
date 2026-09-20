@@ -584,14 +584,12 @@ async function handleCreateScan(event) {
   }
 
   const url = document.getElementById('scanUrl').value;
-  const numPages = parseInt(document.getElementById('scanPages').value, 10);
-  const timeout = parseInt(document.getElementById('scanTimeout').value, 10);
-  const depth = parseInt(document.getElementById('scanDepth').value, 10);
-  const headless = document.getElementById('scanHeadless').checked;
-  const inspectCookies = document.getElementById('scanCookies').checked;
-  const inspectTrackers = document.getElementById('scanTrackers').checked;
-  const takeScreenshots = document.getElementById('scanScreenshots') ? document.getElementById('scanScreenshots').checked : true;
-  const cookieAction = document.querySelector('input[name="cookieAction"]:checked').value;
+  const profileId = document.getElementById('scanProfileId').value;
+  
+  if (!profileId) {
+    showToast('Veuillez sélectionner un type de scan.', 'error');
+    return;
+  }
 
   try {
     const res = await secureFetch('/api/v1/scans', {
@@ -602,7 +600,7 @@ async function handleCreateScan(event) {
       },
       body: JSON.stringify({
         url,
-        options: { numPages, timeout, depth, headless, inspectCookies, inspectTrackers, takeScreenshots, cookieAction }
+        profile_id: profileId
       })
     });
 
@@ -1628,5 +1626,213 @@ window.addEventListener('click', function(event) {
     if (!menu.contains(event.target) && !trigger.contains(event.target)) {
       menu.classList.remove('show');
     }
+  }
+});
+
+
+// --- SCAN PROFILES LOGIC ---
+
+let allProfilesCache = [];
+
+async function loadScanProfiles() {
+  const tbody = document.getElementById('scanProfilesTableBody');
+  if (!tbody) return;
+  try {
+    const res = await secureFetch('/api/v1/scan-profiles', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.message || 'Error loading profiles');
+
+    allProfilesCache = data.profiles || [];
+    tbody.innerHTML = '';
+    
+    if (allProfilesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);">Aucun profil de scan trouvé.</td></tr>';
+      return;
+    }
+
+    allProfilesCache.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(p.label)}</strong></td>
+        <td>${escapeHtml(p.description || '')}</td>
+        <td>${p.fk_usergroup ? 'Groupe ID:' + p.fk_usergroup : 'Personnel'}</td>
+        <td>${p.max_pages}</td>
+        <td>${p.timeout_secs}s</td>
+        <td>${new Date(p.datec).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="editScanProfile(${p.rowid})">Modifier</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteScanProfile(${p.rowid})">Supprimer</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (error) {
+    console.error('Error loading profiles:', error);
+    showToast(error.message, 'error');
+  }
+}
+
+async function loadScanProfilesDropdown() {
+  const select = document.getElementById('scanProfileId');
+  if (!select) return;
+  try {
+    const res = await secureFetch('/api/v1/scan-profiles', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error('Error loading profiles');
+    allProfilesCache = data.profiles || [];
+    
+    select.innerHTML = '<option value="">-- Sélectionnez un type de scan --</option>';
+    allProfilesCache.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.rowid;
+      opt.textContent = p.label;
+      select.appendChild(opt);
+    });
+  } catch (error) {
+    console.error('Error loading profiles dropdown:', error);
+  }
+}
+
+function renderSelectedProfileSummary() {
+  const select = document.getElementById('scanProfileId');
+  const summaryBox = document.getElementById('scanProfileSummaryBox');
+  if (!select || !summaryBox) return;
+
+  const profileId = select.value;
+  if (!profileId) {
+    summaryBox.style.display = 'none';
+    return;
+  }
+
+  const profile = allProfilesCache.find(p => p.rowid == profileId);
+  if (!profile) return;
+
+  summaryBox.style.display = 'block';
+  summaryBox.innerHTML = `
+    <div style="font-weight: 600; color: var(--accent-cyan); margin-bottom: 5px;">${escapeHtml(profile.label)}</div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">${escapeHtml(profile.description || '')}</div>
+    <div style="display: flex; gap: 15px; font-size: 0.8rem; color: var(--text-dim);">
+      <span><strong>Pages:</strong> ${profile.max_pages}</span>
+      <span><strong>Profondeur:</strong> ${profile.max_depth}</span>
+      <span><strong>Timeout:</strong> ${profile.timeout_secs}s</span>
+      <span><strong>Headless:</strong> ${profile.headless ? 'Oui' : 'Non'}</span>
+    </div>
+  `;
+}
+
+function openScanProfileModal() {
+  document.getElementById('profileRowid').value = '';
+  document.getElementById('profileLabel').value = '';
+  document.getElementById('profileDesc').value = '';
+  document.getElementById('profilePages').value = 100;
+  document.getElementById('profileTimeout').value = 300;
+  document.getElementById('profileDepth').value = 3;
+  document.getElementById('profileHeadless').checked = true;
+  document.getElementById('profileCookies').checked = true;
+  document.getElementById('profileTrackers').checked = true;
+  document.getElementById('profileScreenshots').checked = false;
+  
+  const radioNone = document.querySelector('input[name="profileCookieAction"][value="none"]');
+  if (radioNone) radioNone.checked = true;
+  
+  openModal('scanProfileModal');
+}
+
+function editScanProfile(id) {
+  const profile = allProfilesCache.find(p => p.rowid === id);
+  if (!profile) return;
+
+  document.getElementById('profileRowid').value = profile.rowid;
+  document.getElementById('profileLabel').value = profile.label;
+  document.getElementById('profileDesc').value = profile.description || '';
+  document.getElementById('profilePages').value = profile.max_pages;
+  document.getElementById('profileTimeout').value = profile.timeout_secs;
+  document.getElementById('profileDepth').value = profile.max_depth;
+  
+  document.getElementById('profileHeadless').checked = !!profile.headless;
+  document.getElementById('profileCookies').checked = !!profile.inspect_cookies;
+  document.getElementById('profileTrackers').checked = !!profile.detect_trackers;
+  document.getElementById('profileScreenshots').checked = !!profile.capture_images;
+  
+  const actionRadios = document.querySelectorAll('input[name="profileCookieAction"]');
+  actionRadios.forEach(r => {
+    if (r.value === profile.cookie_action) r.checked = true;
+  });
+
+  openModal('scanProfileModal');
+}
+
+async function handleSaveScanProfile(event) {
+  event.preventDefault();
+  const rowid = document.getElementById('profileRowid').value;
+  const label = document.getElementById('profileLabel').value;
+  const description = document.getElementById('profileDesc').value;
+  const max_pages = parseInt(document.getElementById('profilePages').value, 10);
+  const timeout_secs = parseInt(document.getElementById('profileTimeout').value, 10);
+  const max_depth = parseInt(document.getElementById('profileDepth').value, 10);
+  
+  const headless = document.getElementById('profileHeadless').checked ? 1 : 0;
+  const inspect_cookies = document.getElementById('profileCookies').checked ? 1 : 0;
+  const detect_trackers = document.getElementById('profileTrackers').checked ? 1 : 0;
+  const capture_images = document.getElementById('profileScreenshots').checked ? 1 : 0;
+  
+  const cookieActionEl = document.querySelector('input[name="profileCookieAction"]:checked');
+  const cookie_action = cookieActionEl ? cookieActionEl.value : 'none';
+  
+  const fk_usergroup = document.getElementById('profileOwner').value || null;
+
+  const payload = {
+    label, description, max_pages, timeout_secs, max_depth,
+    headless, inspect_cookies, detect_trackers, capture_images, cookie_action,
+    fk_usergroup
+  };
+
+  try {
+    const url = rowid ? `/api/v1/scan-profiles/${rowid}` : '/api/v1/scan-profiles';
+    const method = rowid ? 'PUT' : 'POST';
+    
+    const res = await secureFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const data = await parseJsonResponse(res);
+      throw new Error(data.error || 'Erreur lors de la sauvegarde du profil');
+    }
+    
+    showToast('Profil enregistré !', 'success');
+    closeModal('scanProfileModal');
+    loadScanProfiles();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function deleteScanProfile(id) {
+  if (!confirm('Voulez-vous vraiment supprimer ce profil ?')) return;
+  try {
+    const res = await secureFetch(`/api/v1/scan-profiles/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Erreur de suppression');
+    showToast('Profil supprimé', 'success');
+    loadScanProfiles();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+// Hook into loadScans to also load profiles for dropdown if on scans page
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.pathname.endsWith('scans.html') || window.location.pathname === '/') {
+    setTimeout(loadScanProfilesDropdown, 500);
+  }
+  if (window.location.pathname.endsWith('scan-profiles.html')) {
+    setTimeout(loadScanProfiles, 500);
   }
 });

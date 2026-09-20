@@ -8,6 +8,7 @@ import { createScan, getScan, listScans, getActiveScanLogs, downloadScanPdf } fr
 import { listUsers, createUser, createTokenForUser, deleteUser, updateProfile } from '../controllers/userController.js';
 import { getSettings, updateSettings, getLoginLogs, getPublicConfig, listEmailTemplates, updateEmailTemplate, resetEmailTemplate, testSmtp } from '../controllers/settingsController.js';
 import { listGroups, createGroup, updateGroup, deleteGroup, listSystemPermissions } from '../controllers/groupController.js';
+import * as scanProfileController from '../controllers/scanProfileController.js';
 
 const router = express.Router();
 
@@ -23,6 +24,15 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+/**
+ * Scan Profiles API (Types de Scan)
+ */
+router.get('/scan-profiles', authenticateToken, scanProfileController.listProfiles);
+router.get('/scan-profiles/:id', authenticateToken, scanProfileController.getProfile);
+router.post('/scan-profiles', authenticateToken, scanProfileController.createProfile);
+router.put('/scan-profiles/:id', authenticateToken, scanProfileController.updateProfile);
+router.delete('/scan-profiles/:id', authenticateToken, scanProfileController.deleteProfile);
 
 // Endpoint to obtain fresh CSRF token
 router.get('/csrf-token', getCsrfToken);

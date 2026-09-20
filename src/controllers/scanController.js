@@ -59,7 +59,8 @@ export function generateFormattedScanId(targetUrl) {
  */
 export function createScan(req, res) {
   try {
-    const { url, options = {} } = req.body;
+    const { url, profile_id } = req.body;
+    let { options = {} } = req.body;
 
     if (!url) {
       return res.status(400).json({ error: 'Bad Request', message: 'Target URL is required' });
@@ -72,7 +73,28 @@ export function createScan(req, res) {
     }
 
     const userId = req.user ? req.user.id : null;
+    let profileLabel = 'Custom';
     
+    // Fetch profile if provided
+    if (profile_id) {
+      const profile = db.prepare('SELECT * FROM scan_profiles WHERE rowid = ?').get(profile_id);
+      if (!profile) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Invalid Profile ID' });
+      }
+      
+      profileLabel = profile.label;
+      options = {
+        numPages: profile.max_pages,
+        timeout: profile.timeout_secs,
+        depth: profile.max_depth,
+        headless: !!profile.headless,
+        inspectCookies: !!profile.inspect_cookies,
+        detectTrackers: !!profile.detect_trackers,
+        captureImages: !!profile.capture_images,
+        cookieAction: profile.cookie_action || 'ignore'
+      };
+    }
+
     // Calculate user limits
     let maxTimeout = 60;
     let maxPages = 0;
@@ -100,6 +122,7 @@ export function createScan(req, res) {
     options.numPages = Math.min(parseInt(options.numPages || 0, 10), maxPages);
     options.timeout = Math.min(parseInt(options.timeout || 60, 10), maxTimeout);
     options.depth = Math.min(parseInt(options.depth || 3, 10), maxDepth);
+    options.profile_id = profile_id;
 
     const scanId = generateFormattedScanId(url);
 
@@ -107,6 +130,18 @@ export function createScan(req, res) {
       `INSERT INTO scans (id, user_id, target_url, status, options_json, progress_percent, progress_step) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(scanId, userId, url, 'pending', JSON.stringify(options), 5, 'Demande de scan reçue...');
+
+    // Log the action if user is authenticated
+    if (userId) {
+      try {
+        db.prepare(`
+          INSERT INTO actioncomm (label, note, fk_user_author, elementtype, fk_element)
+          VALUES (?, ?, ?, ?, ?)
+        `).run('LAUNCH_SCAN', `Lancement scan sur ${url} (Profil: ${profileLabel})`, userId, 'scan', scanId);
+      } catch (err) {
+        console.error('[ActionComm] Failed to log scan launch:', err);
+      }
+    }
 
     // Trigger scan asynchronously in background
     runScanJob(scanId, url, options).catch((err) => {
