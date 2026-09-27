@@ -455,11 +455,21 @@ body {
 }
 
 .modal-header {
+  position: sticky;
+  top: -2rem;
+  background: #121826;
+  z-index: 10;
+  margin-top: -2rem;
+  margin-left: -2rem;
+  margin-right: -2rem;
+  padding-top: 2rem;
+  padding-bottom: 1rem;
+  padding-left: 2rem;
+  padding-right: 2.5rem; /* extra padding for scrollbar */
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -473,12 +483,22 @@ body {
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 1.5rem;
+  font-size: 2rem;
   cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transition: all 0.2s;
 }
 
 .close-btn:hover {
   color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Discreet Floating Toast Notifications System */

@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,15 +23,15 @@ if (!fs.existsSync(screenshotsBaseDir)) {
 /**
  * Helper to update scan progress step and percentage in DB
  */
-export function updateScanProgress(scanId, percent, stepMessage) {
+export async function updateScanProgress(scanId, percent, stepMessage) {
   try {
-    db.prepare('UPDATE scans SET progress_percent = ?, progress_step = ? WHERE id = ?').run(
+    await db.query(`UPDATE ${config.prefix}scans SET progress_percent = ?, progress_step = ? WHERE id = ?`, [
       percent,
       stepMessage,
       scanId
-    );
+    ]);
     // Also log this major step
-    logScanAction(scanId, `[PROGRESS] ${stepMessage} (${percent}%)`);
+    await logScanAction(scanId, `[PROGRESS] ${stepMessage} (${percent}%)`);
   } catch (e) {
     console.warn(`[Scanner Service] Progress update failed for ${scanId}:`, e.message);
   }
@@ -36,9 +40,9 @@ export function updateScanProgress(scanId, percent, stepMessage) {
 /**
  * Helper to add a live log message to the scan
  */
-export function logScanAction(scanId, message) {
+export async function logScanAction(scanId, message) {
   try {
-    db.prepare('INSERT INTO scan_logs (scan_id, message) VALUES (?, ?)').run(scanId, message);
+    await db.query(`INSERT INTO ${config.prefix}scan_logs (scan_id, message) VALUES (?, ?)`, [scanId, message]);
   } catch (e) {
     console.warn(`[Scanner Service] Log insert failed for ${scanId}:`, e.message);
   }
@@ -114,6 +118,8 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 800)));
 
+    let extractedConsentId = null;
+
     if (cookieAction === 'accept' || cookieAction === 'reject') {
       try {
         const textToMatch = cookieAction === 'accept' 
@@ -149,6 +155,24 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
         
         // Wait a bit for the banner to disappear
         await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1500)));
+        
+        if (cookieAction === 'accept') {
+          extractedConsentId = await page.evaluate(() => {
+            try {
+              const ls = window.localStorage;
+              for (let i = 0; i < ls.length; i++) {
+                const key = ls.key(i);
+                if (key) {
+                  const lowerKey = key.toLowerCase();
+                  if (lowerKey.includes('cookie') || lowerKey.includes('consent') || lowerKey.includes('axeptio') || lowerKey.includes('tarteaucitron') || lowerKey.includes('didomi')) {
+                    return ls.getItem(key);
+                  }
+                }
+              }
+            } catch (e) {}
+            return null;
+          });
+        }
       } catch (e) {
         console.warn(`[Puppeteer CookieAction] Could not interact with banner on ${pageUrl}: ${e.message}`);
       }
@@ -170,10 +194,16 @@ async function captureAndSavePageScreenshot(scanId, pageIndex, pageUrl, isHeadle
     console.log(`[Scanner Service] Saved physical screenshot file: ${imageFilePath}`);
 
     // Return relative web URL path for frontend rendering & DB storage
-    return `outputs/screenshots/${scanId}/${imageFilename}`;
+    return {
+      imageWebPath: `outputs/screenshots/${scanId}/${imageFilename}`,
+      consentId: extractedConsentId
+    };
   } catch (err) {
     console.warn(`[Puppeteer Screenshot Notice] Could not capture screenshot for ${pageUrl}: ${err.message}. Using live web screenshot fallback...`);
-    return getRealWebsiteScreenshotUrl(pageUrl);
+    return {
+      imageWebPath: getRealWebsiteScreenshotUrl(pageUrl),
+      consentId: null
+    };
   }
 }
 
@@ -225,8 +255,8 @@ function getRealWebsiteScreenshotUrl(pageUrl) {
 export async function runScanJob(scanId, targetUrl, options = {}) {
   try {
     // Stage 1: Pending -> Processing (15%)
-    db.prepare('UPDATE scans SET status = ? WHERE id = ?').run('processing', scanId);
-    updateScanProgress(scanId, 15, 'Initialisation du navigateur et du scanner...');
+    await db.query(`UPDATE ${config.prefix}scans SET status = ? WHERE id = ?`, ['processing', scanId]);
+    await updateScanProgress(scanId, 15, 'Initialisation du navigateur et du scanner...');
 
     console.log(`[Scanner Service] Starting scan job ${scanId} for URL: ${targetUrl} with options:`, options);
 
@@ -244,7 +274,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
 
     // Stage 2: Connect & Analyze Cookies (40%)
     await new Promise(r => setTimeout(r, 600));
-    updateScanProgress(scanId, 40, 'Connexion à la page cible et extraction des cookies...');
+    await updateScanProgress(scanId, 40, 'Connexion à la page cible et extraction des cookies...');
 
     let scanResult = null;
 
@@ -283,7 +313,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
       let htmlBody = '';
 
       // Stage 3: Crawl & Detect Trackers (70%)
-      updateScanProgress(scanId, 70, 'Détection des traqueurs et crawling des pages secondaires...');
+      await updateScanProgress(scanId, 70, 'Détection des traqueurs et crawling des pages secondaires...');
 
       try {
         const response = await fetch(targetUrl, {
@@ -329,27 +359,102 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
       
       let sitemapUrls = [];
       let scanMethod = 'SITEMAP';
-      try {
-        const sitemapResponse = await fetch(`${parsedUrl.origin}/sitemap.xml`, {
-          method: 'GET',
-          headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' },
-          signal: AbortSignal.timeout(10000)
-        });
-        if (sitemapResponse.ok && sitemapResponse.headers.get('content-type')?.includes('xml')) {
-          const sitemapXml = await sitemapResponse.text();
-          const matches = sitemapXml.match(/<loc>(.*?)<\/loc>/g);
+      let robotsTxtContent = null;
+      let sitemapName = null;
+      let sitemapContent = null;
+
+      const doSitemapIndexScan = options.sitemapIndexScan !== false;
+      const sitemapIndexMax = parseInt(options.sitemapIndexMax, 10) || 5;
+
+      async function parseSitemapContent(sUrl, xmlContent, maxSitemaps, currentCount = { v: 0 }) {
+        let urls = [];
+        if (xmlContent.includes('<sitemapindex>')) {
+          const sitemapLocs = xmlContent.match(/<loc>(.*?)<\/loc>/g);
+          if (sitemapLocs) {
+            for (const locTag of sitemapLocs) {
+              if (maxSitemaps > 0 && currentCount.v >= maxSitemaps) break;
+              const subUrl = locTag.replace(/<\/?loc>/g, '').trim();
+              try {
+                if (maxSitemaps > 0) currentCount.v++;
+                const subRes = await fetch(subUrl, { method: 'GET', headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' }, signal: AbortSignal.timeout(10000) });
+                if (subRes.ok) {
+                  const subXml = await subRes.text();
+                  urls = urls.concat(await parseSitemapContent(subUrl, subXml, maxSitemaps, currentCount));
+                }
+              } catch(e) {}
+            }
+          }
+        } else {
+          const matches = xmlContent.match(/<loc>(.*?)<\/loc>/g);
           if (matches) {
-            sitemapUrls = matches.map(m => m.replace(/<\/?loc>/g, '').trim());
+            urls = matches.map(m => m.replace(/<\/?loc>/g, '').trim());
           }
         }
-      } catch (sitemapErr) {
-        console.warn(`[Scanner Service] Could not fetch sitemap.xml for ${targetUrl}: ${sitemapErr.message}`);
+        return urls;
+      }
+
+      try {
+        const robotsResponse = await fetch(`${parsedUrl.origin}/robots.txt`, {
+          method: 'GET',
+          headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (robotsResponse.ok) {
+          robotsTxtContent = await robotsResponse.text();
+          const sitemapMatches = robotsTxtContent.match(/Sitemap:\s*(https?:\/\/[^\s]+)/gi);
+          if (sitemapMatches) {
+            for (const match of sitemapMatches) {
+              const sUrl = match.replace(/Sitemap:\s*/i, '').trim();
+              if (sUrl) {
+                try {
+                  const sitemapResponse = await fetch(sUrl, {
+                    method: 'GET',
+                    headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' },
+                    signal: AbortSignal.timeout(10000)
+                  });
+                  if (sitemapResponse.ok) {
+                    const sitemapXml = await sitemapResponse.text();
+                    if (!sitemapContent) {
+                      sitemapContent = sitemapXml;
+                      sitemapName = sUrl.split('/').pop() || 'sitemap.xml';
+                    }
+                    const maxS = doSitemapIndexScan ? sitemapIndexMax : 0;
+                    const parsedUrls = await parseSitemapContent(sUrl, sitemapXml, maxS);
+                    sitemapUrls = sitemapUrls.concat(parsedUrls);
+                  }
+                } catch(e) {}
+              }
+            }
+          }
+        }
+      } catch (err) {
+         console.warn(`[Scanner Service] Could not fetch robots.txt for ${targetUrl}: ${err.message}`);
+      }
+      
+      if (sitemapUrls.length === 0) {
+        try {
+          const sitemapResponse = await fetch(`${parsedUrl.origin}/sitemap.xml`, {
+            method: 'GET',
+            headers: { 'User-Agent': 'EOCheck-Scanner/1.0 (eocheck.eoxia.com)' },
+            signal: AbortSignal.timeout(10000)
+          });
+          if (sitemapResponse.ok && sitemapResponse.headers.get('content-type')?.includes('xml')) {
+            const sitemapXml = await sitemapResponse.text();
+            sitemapContent = sitemapXml;
+            sitemapName = 'sitemap.xml';
+            const maxS = doSitemapIndexScan ? sitemapIndexMax : 0;
+            const parsedUrls = await parseSitemapContent(`${parsedUrl.origin}/sitemap.xml`, sitemapXml, maxS);
+            sitemapUrls = sitemapUrls.concat(parsedUrls);
+          }
+        } catch (sitemapErr) {
+          console.warn(`[Scanner Service] Could not fetch sitemap.xml for ${targetUrl}: ${sitemapErr.message}`);
+        }
       }
 
       let added = 0;
       if (sitemapUrls.length > 0) {
         scanMethod = 'SITEMAP';
-        logScanAction(scanId, `[SITEMAP] Fichier sitemap.xml détecté avec ${sitemapUrls.length} URLs totales.`);
+        await logScanAction(scanId, `[SITEMAP] Fichier sitemap.xml détecté avec ${sitemapUrls.length} URLs totales.`);
         // Filter by depth for sitemaps
         for (let i = 0; i < sitemapUrls.length && added < numPages; i++) {
           const sUrl = sitemapUrls[i];
@@ -360,20 +465,24 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
               if (urlDepth <= maxDepth) {
                 scannedUrls.push(sUrl);
                 added++;
-                logScanAction(scanId, `[SITEMAP] Ajout de l'URL (${added}/${numPages}): ${sUrl}`);
+                await logScanAction(scanId, `[SITEMAP] Ajout de l'URL (${added}/${numPages}): ${sUrl}`);
               }
             } catch(e){}
           }
         }
       } else {
-        scanMethod = 'HTML_CRAWLER';
-        logScanAction(scanId, `[CRAWLER] Sitemap invalide ou introuvable. Bascule sur l'exploration HTML (BFS).`);
-        // Fallback: BFS crawler using HTTP fetches (Profondeur dynamique)
-        const queue = [{ url: targetUrl, depth: 0, html: htmlBody }];
+        if (options.useSitemapOnly) {
+          scanMethod = 'TARGET_ONLY';
+          await logScanAction(scanId, `[SITEMAP_ONLY] Aucun sitemap trouvé et l'option 'Sitemap Uniquement' est activée. Seule la page cible sera scannée.`);
+        } else {
+          scanMethod = 'HTML_CRAWLER';
+          await logScanAction(scanId, `[CRAWLER] Sitemap invalide ou introuvable. Bascule sur l'exploration HTML (BFS).`);
+          // Fallback: BFS crawler using HTTP fetches (Profondeur dynamique)
+          const queue = [{ url: targetUrl, depth: 0, html: htmlBody }];
         
         while (queue.length > 0 && added < numPages) {
           const current = queue.shift();
-          logScanAction(scanId, `[CRAWLER] Exploration de la page: ${current.url} (Profondeur: ${current.depth})`);
+          await logScanAction(scanId, `[CRAWLER] Exploration de la page: ${current.url} (Profondeur: ${current.depth})`);
           
           let body = current.html;
           if (!body) {
@@ -385,7 +494,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
               });
               if (res.ok) body = await res.text();
             } catch(e) {
-              logScanAction(scanId, `[CRAWLER] Erreur lors de la récupération de ${current.url}`);
+              await logScanAction(scanId, `[CRAWLER] Erreur lors de la récupération de ${current.url}`);
             }
           }
           
@@ -406,7 +515,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
                   scannedUrls.push(newUrl);
                   queue.push({ url: newUrl, depth: current.depth + 1, html: null });
                   added++;
-                  logScanAction(scanId, `[CRAWLER] Lien trouvé (${added}/${numPages}): ${newUrl}`);
+                  await logScanAction(scanId, `[CRAWLER] Lien trouvé (${added}/${numPages}): ${newUrl}`);
                 }
               }
             }
@@ -416,27 +525,36 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
         // If still nothing, fallback to hardcoded
         if (added === 0) {
           scanMethod = 'FALLBACK_HARDCODED';
-          logScanAction(scanId, `[FALLBACK] Aucun lien trouvé. Utilisation des chemins par défaut.`);
+          await logScanAction(scanId, `[FALLBACK] Aucun lien trouvé. Utilisation des chemins par défaut.`);
           const sampleInnerPaths = ['/a-propos', '/contact', '/politique-de-confidentialite', '/services', '/mentions-legales'];
           for (let i = 0; i < Math.min(numPages, sampleInnerPaths.length); i++) {
             scannedUrls.push(`${parsedUrl.origin}${sampleInnerPaths[i]}`);
           }
         }
+        }
       }
 
       // Stage 4: Screenshots Generation & Physical Disk Storage (90%)
-      updateScanProgress(scanId, 90, "Génération des captures d'écran et enregistrement dans C:\\wamp64\\www\\eocheck\\outputs...");
+      await updateScanProgress(scanId, 90, "Génération des captures d'écran et enregistrement dans C:\\wamp64\\www\\eocheck\\outputs...");
 
       const screenshots = [];
+      let globalConsentId = null;
       if (takeScreenshots) {
         for (let idx = 0; idx < scannedUrls.length; idx++) {
           const pageUrl = scannedUrls[idx];
           const pageTitle = idx === 0 ? "Page d'accueil (Accueil)" : `Page secondaire #${idx} (${new URL(pageUrl).pathname})`;
 
-          logScanAction(scanId, `[SCREENSHOT] Capture de l'URL (${idx+1}/${scannedUrls.length}): ${pageUrl}`);
+          await logScanAction(scanId, `[SCREENSHOT] Capture de l'URL (${idx+1}/${scannedUrls.length}): ${pageUrl}`);
 
           // Save physical JPEG image file into outputs/screenshots/SCAN_ID/ with human-readable page name
-          const imageWebPath = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs, options.cookieAction);
+          const captureRes = await captureAndSavePageScreenshot(scanId, idx, pageUrl, isHeadless, timeoutMs, options.cookieAction);
+          let imageWebPath = captureRes;
+          if (captureRes && typeof captureRes === 'object') {
+            imageWebPath = captureRes.imageWebPath;
+            if (captureRes.consentId && !globalConsentId) {
+              globalConsentId = captureRes.consentId;
+            }
+          }
 
           screenshots.push({
             url: pageUrl,
@@ -456,6 +574,13 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
         duration_ms: Date.now() - inspectStartTime,
         scanned_urls: scannedUrls,
         screenshots: screenshots,
+        cookie_consent_id: globalConsentId,
+        appendix: (sitemapName && sitemapContent) ? {
+          sitemap: {
+            name: sitemapName,
+            content: sitemapContent
+          }
+        } : null,
         options_applied: {
           numPages,
           headless: isHeadless,
@@ -472,6 +597,7 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
           content_type: headers['content-type'] || 'text/html'
         },
         privacy_inspection: {
+          robots_txt: robotsTxtContent,
           set_cookie_header_present: Boolean(setCookieHeader),
           trackers_count: trackersDetected.length,
           trackers_detected: trackersDetected,
@@ -486,21 +612,23 @@ export async function runScanJob(scanId, targetUrl, options = {}) {
     }
 
     // Stage 5: Completed (100%)
-    db.prepare(
-      `UPDATE scans 
+    await db.query(
+      `UPDATE ${config.prefix}scans 
        SET status = ?, result_json = ?, progress_percent = 100, progress_step = ?, completed_at = CURRENT_TIMESTAMP 
-       WHERE id = ?`
-    ).run('completed', JSON.stringify(scanResult), 'Scan terminé avec succès', scanId);
+       WHERE id = ?`,
+      ['completed', JSON.stringify(scanResult), 'Scan terminé avec succès', scanId]
+    );
 
     console.log(`[Scanner Service] Scan ${scanId} completed successfully with physical files in outputs/screenshots/${scanId}.`);
     return scanResult;
   } catch (error) {
     console.error(`[Scanner Service] Scan ${scanId} failed:`, error);
-    db.prepare(
-      `UPDATE scans 
+    await db.query(
+      `UPDATE ${config.prefix}scans 
        SET status = ?, error_message = ?, progress_step = ?, completed_at = CURRENT_TIMESTAMP 
-       WHERE id = ?`
-    ).run('failed', error.message, 'Échec du scan', scanId);
+       WHERE id = ?`,
+      ['failed', error.message, 'Échec du scan', scanId]
+    );
     throw error;
   }
 }

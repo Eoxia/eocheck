@@ -26,7 +26,7 @@ export function generateCsrfToken() {
 /**
  * Express Controller to deliver fresh CSRF Token
  */
-export function getCsrfToken(req, res) {
+export function getCsrfToken(req, res, next) {
   const csrfToken = generateCsrfToken();
   return res.json({ csrfToken });
 }
@@ -48,20 +48,18 @@ export function verifyCsrfToken(req, res, next) {
   const clientToken = req.headers['x-csrf-token'] || (req.body && req.body._csrf);
 
   if (!clientToken) {
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'CSRF token is missing. Please refresh the page and try again.'
-    });
+    const err = new Error('CSRF token is missing. Please refresh the page and try again.');
+    err.code = 'ERR_CSRF_67';
+    return next(err);
   }
 
   const expiry = csrfTokensStore.get(clientToken);
 
   if (!expiry || expiry < Date.now()) {
     csrfTokensStore.delete(clientToken);
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Invalid or expired CSRF token. Please refresh the page.'
-    });
+    const err = new Error('Invalid or expired CSRF token. Please refresh the page.');
+    err.code = 'ERR_CSRF_68';
+    return next(err);
   }
 
   next();

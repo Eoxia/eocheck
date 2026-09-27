@@ -1,5 +1,9 @@
 import nodemailer from 'nodemailer';
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 /**
  * Default System Templates Definition
@@ -42,9 +46,10 @@ export const DEFAULT_TEMPLATES = {
 /**
  * Helper to get SMTP settings from the database
  */
-export function getSmtpConfig() {
+export async function getSmtpConfig() {
   try {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('smtp_config');
+    const [rows] = await db.query(`SELECT value FROM ${config.prefix}settings WHERE \`key\` = ?`, ['smtp_config']);
+    const row = rows[0];
     if (row && row.value) {
       return JSON.parse(row.value);
     }
@@ -57,9 +62,10 @@ export function getSmtpConfig() {
 /**
  * Helper to get Email template from the database or fallback to default
  */
-export function getEmailTemplate(templateKey) {
+export async function getEmailTemplate(templateKey) {
   try {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(templateKey);
+    const [rows] = await db.query(`SELECT value FROM ${config.prefix}settings WHERE \`key\` = ?`, [templateKey]);
+    const row = rows[0];
     if (row && row.value) {
       const parsed = JSON.parse(row.value);
       return {
@@ -92,25 +98,25 @@ export function parseTemplate(htmlOrText, variables = {}) {
  * Send an email
  */
 export async function sendEmail(to, subject, html) {
-  const config = getSmtpConfig();
-  if (!config || !config.host) {
+  const configParams = await getSmtpConfig();
+  if (!configParams || !configParams.host) {
     console.warn('[EmailService] SMTP configuration is missing or incomplete. Email not sent.');
     return false;
   }
 
   try {
     const transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port || 587,
-      secure: config.secure === true, // true for 465, false for other ports
+      host: configParams.host,
+      port: configParams.port || 587,
+      secure: configParams.secure === true, // true for 465, false for other ports
       auth: {
-        user: config.user,
-        pass: config.pass
+        user: configParams.user,
+        pass: configParams.pass
       }
     });
 
     const info = await transporter.sendMail({
-      from: config.from || '"EOCheck" <eocheck@eoxia.com>',
+      from: configParams.from || '"EOCheck" <eocheck@eoxia.com>',
       to,
       subject,
       html
@@ -129,7 +135,7 @@ export async function sendEmail(to, subject, html) {
  */
 export async function sendVerificationEmail(to, code) {
   // Use new key
-  const template = getEmailTemplate('tpl_verify_email');
+  const template = await getEmailTemplate('tpl_verify_email');
   if (!template || !template.body) {
     console.warn('[EmailService] Verification template is missing. Email not sent.');
     return false;
@@ -145,6 +151,6 @@ export async function sendVerificationEmail(to, code) {
  * Send Test Email
  */
 export async function sendTestEmail(to) {
-  const template = getEmailTemplate('tpl_smtp_test');
+  const template = await getEmailTemplate('tpl_smtp_test');
   return sendEmail(to, template.subject, template.body);
 }

@@ -1,7 +1,11 @@
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
 import { runScanJob, generateScanReportPdf } from '../services/scannerService.js';
 
-export async function downloadScanPdf(req, res) {
+const config = getDbConfig();
+const db = await getDbConnection();
+
+export async function downloadScanPdf(req, res, next) {
   try {
     const { id } = req.params;
     // Extract token from either headers or query string
@@ -11,7 +15,7 @@ export async function downloadScanPdf(req, res) {
     }
     
     if (!token) {
-      return res.status(401).send('Token required for PDF generation');
+      return next(Object.assign(new Error('Token required for PDF generation'), { code: 'ERR_SCAN_PDF_TOKEN' }));
     }
 
     const pdfBuffer = await generateScanReportPdf(id, token);
@@ -21,7 +25,7 @@ export async function downloadScanPdf(req, res) {
     res.send(Buffer.from(pdfBuffer));
   } catch (error) {
     console.error('[Scan Controller] PDF generation failed:', error);
-    res.status(500).send('Erreur lors de la génération du PDF');
+    return next(Object.assign(new Error('Erreur lors de la génération du PDF'), { code: 'ERR_SCAN_PDF_GEN' }));
   }
 }
 
@@ -29,7 +33,7 @@ export async function downloadScanPdf(req, res) {
  * Generate formatted custom scan ID: url-AAAMMJJHHMMSS-0001
  * Example: www.eoxia.com-20260725235008-0001
  */
-export function generateFormattedScanId(targetUrl) {
+export async function generateFormattedScanId(targetUrl) {
   let urlSlug = 'url';
   try {
     const parsed = new URL(targetUrl);
@@ -48,7 +52,7 @@ export function generateFormattedScanId(targetUrl) {
 
   const timestamp = `${YYYY}${MM}${DD}${HH}${mm}${SS}`;
 
-  const countRow = db.prepare('SELECT COUNT(*) as total FROM scans').get();
+  const countRow = (await db.query(`SELECT COUNT(*) as total FROM ${config.prefix}scans`))[0][0];
   const sequenceNum = String((countRow ? countRow.total : 0) + 1).padStart(4, '0');
 
   return `${urlSlug}-${timestamp}-${sequenceNum}`;
@@ -57,19 +61,23 @@ export function generateFormattedScanId(targetUrl) {
 /**
  * Submit a website scan request
  */
-export function createScan(req, res) {
+export async function createScan(req, res, next) {
   try {
     const { url, profile_id } = req.body;
     let { options = {} } = req.body;
 
     if (!url) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Target URL is required' });
+      const err = new Error('Target URL is required');
+      err.code = 'ERR_SCAN_22';
+      return next(err);
     }
 
     try {
       new URL(url);
     } catch (e) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Invalid URL format. Provide a full URL (e.g., https://example.com)' });
+      const err = new Error('Invalid URL format. Provide a full URL (e.g., https://example.com)');
+      err.code = 'ERR_SCAN_23';
+      return next(err);
     }
 
     const userId = req.user ? req.user.id : null;
@@ -77,9 +85,11 @@ export function createScan(req, res) {
     
     // Fetch profile if provided
     if (profile_id) {
-      const profile = db.prepare('SELECT * FROM scan_profiles WHERE rowid = ?').get(profile_id);
+      const profile = (await db.query(`SELECT * FROM ${config.prefix}scan_profiles WHERE rowid = ?`, [profile_id]))[0][0];
       if (!profile) {
-        return res.status(400).json({ error: 'Bad Request', message: 'Invalid Profile ID' });
+        const err = new Error('Invalid Profile ID');
+        err.code = 'ERR_SCAN_24';
+        return next(err);
       }
       
       profileLabel = profile.label;
@@ -91,6 +101,7 @@ export function createScan(req, res) {
         inspectCookies: !!profile.inspect_cookies,
         detectTrackers: !!profile.detect_trackers,
         captureImages: !!profile.capture_images,
+        useSitemapOnly: !!profile.use_sitemap_only,
         cookieAction: profile.cookie_action || 'ignore'
       };
     }
@@ -101,15 +112,15 @@ export function createScan(req, res) {
     let maxDepth = 3;
     
     if (userId) {
-      const groupLimits = db.prepare(`
+      const groupLimits = (await db.query(`
         SELECT 
           MAX(g.max_pages) as max_pages, 
           MAX(g.max_timeout) as max_timeout,
           MAX(g.max_depth) as max_depth
-        FROM user_groups g
-        JOIN user_group_memberships m ON g.id = m.group_id
+        FROM ${config.prefix}user_groups g
+        JOIN ${config.prefix}user_group_memberships m ON g.id = m.group_id
         WHERE m.user_id = ?
-      `).get(userId);
+      `, [userId]))[0][0];
       
       if (groupLimits) {
         if (groupLimits.max_pages !== null) maxPages = groupLimits.max_pages;
@@ -124,20 +135,21 @@ export function createScan(req, res) {
     options.depth = Math.min(parseInt(options.depth || 3, 10), maxDepth);
     options.profile_id = profile_id;
 
-    const scanId = generateFormattedScanId(url);
+    const scanId = await generateFormattedScanId(url);
 
-    db.prepare(
-      `INSERT INTO scans (id, user_id, target_url, status, options_json, progress_percent, progress_step) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(scanId, userId, url, 'pending', JSON.stringify(options), 5, 'Demande de scan reçue...');
+    await db.query(
+      `INSERT INTO ${config.prefix}scans (id, user_id, target_url, status, options_json, progress_percent, progress_step) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       [scanId, userId, url, 'pending', JSON.stringify(options), 5, 'Demande de scan reçue...']
+    );
 
     // Log the action if user is authenticated
     if (userId) {
       try {
-        db.prepare(`
-          INSERT INTO actioncomm (label, note, fk_user_author, elementtype, fk_element)
+        await db.query(`
+          INSERT INTO ${config.prefix}actioncomm (label, note, fk_user_author, elementtype, fk_element)
           VALUES (?, ?, ?, ?, ?)
-        `).run('LAUNCH_SCAN', `Lancement scan sur ${url} (Profil: ${profileLabel})`, userId, 'scan', scanId);
+        `, ['LAUNCH_SCAN', `Lancement scan sur ${url} (Profil: ${profileLabel})`, userId, 'scan', scanId]);
       } catch (err) {
         console.error('[ActionComm] Failed to log scan launch:', err);
       }
@@ -160,21 +172,24 @@ export function createScan(req, res) {
     });
   } catch (error) {
     console.error('[Scan Controller] Create scan error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create scan request' });
+    error.code = 'ERR_SCAN_CREATE';
+    return next(error);
   }
 }
 
 /**
  * Get scan details & results by ID
  */
-export function getScan(req, res) {
+export async function getScan(req, res, next) {
   try {
     const { id } = req.params;
 
-    const scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(id);
+    const scan = (await db.query(`SELECT * FROM ${config.prefix}scans WHERE id = ?`, [id]))[0][0];
 
     if (!scan) {
-      return res.status(404).json({ error: 'Not Found', message: 'Scan not found' });
+      const err = new Error('Scan not found');
+      err.code = 'ERR_SCAN_25';
+      return next(err);
     }
 
     return res.json({
@@ -183,65 +198,67 @@ export function getScan(req, res) {
       status: scan.status,
       progress_percent: scan.progress_percent || 0,
       progress_step: scan.progress_step || '',
-      options: scan.options_json ? JSON.parse(scan.options_json) : {},
-      result: scan.result_json ? JSON.parse(scan.result_json) : null,
+      options: scan.options_json ? (typeof scan.options_json === 'string' ? JSON.parse(scan.options_json) : scan.options_json) : {},
+      result: scan.result_json ? (typeof scan.result_json === 'string' ? JSON.parse(scan.result_json) : scan.result_json) : null,
       error_message: scan.error_message,
       created_at: scan.created_at,
       completed_at: scan.completed_at
     });
   } catch (error) {
     console.error('[Scan Controller] Get scan error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch scan details' });
+    const err = new Error('Failed to fetch scan details');
+    err.code = 'ERR_SCAN_26';
+    return next(err);
   }
 }
 
 /**
  * List scans (filtered by user if authenticated, preserving options for each row)
  */
-export function listScans(req, res) {
+export async function listScans(req, res, next) {
   try {
     const userId = req.user ? req.user.id : null;
     let scanRows = [];
 
     if (userId) {
-      scanRows = db
-        .prepare('SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
-        .all(userId);
+      scanRows = (await db.query(`SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM ${config.prefix}scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`, [userId]))[0];
     } else {
-      scanRows = db
-        .prepare('SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM scans ORDER BY created_at DESC LIMIT 20')
-        .all();
+      scanRows = (await db.query(`SELECT id, target_url, status, options_json, progress_percent, progress_step, created_at, completed_at FROM ${config.prefix}scans ORDER BY created_at DESC LIMIT 20`))[0];
     }
 
     const scans = scanRows.map(s => ({
       ...s,
-      options: s.options_json ? JSON.parse(s.options_json) : {}
+      options: s.options_json ? (typeof s.options_json === 'string' ? JSON.parse(s.options_json) : s.options_json) : {}
     }));
 
     return res.json({ scans });
   } catch (error) {
     console.error('[Scan Controller] List scans error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to list scans' });
+    const err = new Error('Failed to list scans');
+    err.code = 'ERR_SCAN_27';
+    return next(err);
   }
 }
 
 /**
  * Get live logs for active scans
  */
-export function getActiveScanLogs(req, res) {
+export async function getActiveScanLogs(req, res, next) {
   try {
-    const logs = db.prepare(`
+    const logs = (await db.query(`
       SELECT l.scan_id, l.message, l.created_at, s.target_url
-      FROM scan_logs l
-      JOIN scans s ON l.scan_id = s.id
+      FROM ${config.prefix}scan_logs l
+      JOIN ${config.prefix}scans s ON l.scan_id = s.id
       WHERE s.status IN ('PENDING', 'RUNNING', 'processing')
       ORDER BY l.id DESC
       LIMIT 100
-    `).all();
+    `))[0];
     
     return res.json({ logs: logs.reverse() });
   } catch (error) {
     console.error('[Scan Controller] Failed to fetch live logs:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    const err = new Error('Error');
+    err.code = 'ERR_SCAN_28';
+    return next(err);
   }
 }

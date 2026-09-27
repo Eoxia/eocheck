@@ -1,16 +1,22 @@
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 /**
  * Generate a new API token for client apps (e.g. eo-tools)
  */
-export function createToken(req, res) {
+export async function createToken(req, res, next) {
   try {
     const { name, client_app = 'eo-tools', expires_in_days } = req.body;
 
     if (!name) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Token name is required' });
+      const err = new Error('Token name is required');
+      err.code = 'ERR_TOKEN_42';
+      return next(err);
     }
 
     // Generate random raw token string e.g. eoc_live_abc123...
@@ -27,63 +33,71 @@ export function createToken(req, res) {
       expiresAt = date.toISOString();
     }
 
-    db.prepare(
-      `INSERT INTO api_tokens (id, user_id, token_hash, token_prefix, name, client_app, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(tokenId, req.user.id, tokenHash, tokenPrefix, name, client_app, expiresAt);
+    await db.query(
+      `INSERT INTO ${config.prefix}api_tokens (id, user_id, token_hash, token_prefix, name, client_app, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [tokenId, req.user.id, tokenHash, tokenPrefix, name, client_app, expiresAt]
+    );
 
     return res.status(201).json({
       message: 'API Token generated successfully. Save this token now, it will not be shown again.',
-      token_id: tokenId,
-      name,
-      client_app,
-      api_token: rawToken, // Displayed ONLY once upon creation
-      token_prefix: tokenPrefix,
-      expires_at: expiresAt
+      token: rawToken,
+      id: tokenId,
+      prefix: tokenPrefix
     });
   } catch (error) {
     console.error('[Token Controller] Create token error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create API Token' });
+    const err = new Error('Failed to create API Token');
+    err.code = 'ERR_TOKEN_44';
+    return next(err);
   }
 }
 
 /**
  * List active API tokens for current user
  */
-export function listTokens(req, res) {
+export async function listTokens(req, res, next) {
   try {
-    const tokens = db
-      .prepare(
-        `SELECT id, name, client_app, token_prefix, created_at, expires_at, last_used_at 
-         FROM api_tokens 
-         WHERE user_id = ? 
-         ORDER BY created_at DESC`
-      )
-      .all(req.user.id);
+    const [tokens] = await db.query(
+      `SELECT id, name, client_app, token_prefix, created_at, expires_at, last_used_at 
+       FROM ${config.prefix}api_tokens 
+       WHERE user_id = ? 
+       ORDER BY created_at DESC`,
+      [req.user.id]
+    );
 
     return res.json({ tokens });
   } catch (error) {
     console.error('[Token Controller] List tokens error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to list API tokens' });
+    const err = new Error('Failed to list API tokens');
+    err.code = 'ERR_TOKEN_45';
+    return next(err);
   }
 }
 
 /**
  * Revoke/Delete an API token
  */
-export function revokeToken(req, res) {
+export async function revokeToken(req, res, next) {
   try {
     const { id } = req.params;
 
-    const result = db.prepare('DELETE FROM api_tokens WHERE id = ? AND user_id = ?').run(id, req.user.id);
+    const [result] = await db.query(
+      `DELETE FROM ${config.prefix}api_tokens WHERE id = ? AND user_id = ?`,
+      [id, req.user.id]
+    );
 
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Not Found', message: 'API Token not found or unauthorized' });
+    if (result.affectedRows === 0) {
+      const err = new Error('API Token not found or unauthorized');
+      err.code = 'ERR_TOKEN_46';
+      return next(err);
     }
 
     return res.json({ message: 'API Token revoked successfully', token_id: id });
   } catch (error) {
     console.error('[Token Controller] Revoke token error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to revoke API Token' });
+    const err = new Error('Failed to revoke API Token');
+    err.code = 'ERR_TOKEN_47';
+    return next(err);
   }
 }

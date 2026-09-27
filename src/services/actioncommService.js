@@ -1,4 +1,8 @@
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 /**
  * Log an action into the actioncomm table (Dolibarr-style audit trail).
@@ -9,12 +13,12 @@ import { db } from '../db/index.js';
  * @param {string} elementType - Type of object related to the action (e.g., 'scan_profile', 'scan')
  * @param {number|string} elementId - ID of the object
  */
-export function logAction(label, note, userId, elementType, elementId) {
+export async function logAction(label, note, userId, elementType, elementId) {
   try {
-    db.prepare(`
-      INSERT INTO actioncomm (label, note, fk_user_author, elementtype, fk_element)
+    await db.query(`
+      INSERT INTO ${config.prefix}actioncomm (label, note, fk_user_author, elementtype, fk_element)
       VALUES (?, ?, ?, ?, ?)
-    `).run(label, note || null, userId, elementType, elementId || null);
+    `, [label, note || null, userId, elementType, elementId || null]);
   } catch (error) {
     console.error('[ActionComm] Failed to log action:', error);
   }

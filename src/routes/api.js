@@ -9,6 +9,7 @@ import { listUsers, createUser, createTokenForUser, deleteUser, updateProfile } 
 import { getSettings, updateSettings, getLoginLogs, getPublicConfig, listEmailTemplates, updateEmailTemplate, resetEmailTemplate, testSmtp } from '../controllers/settingsController.js';
 import { listGroups, createGroup, updateGroup, deleteGroup, listSystemPermissions } from '../controllers/groupController.js';
 import * as scanProfileController from '../controllers/scanProfileController.js';
+import { getDbInfo } from '../controllers/systemController.js';
 
 const router = express.Router();
 
@@ -24,6 +25,9 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Admin system tools
+router.get('/system/db-info', authenticateToken, getDbInfo);
 
 /**
  * Scan Profiles API (Types de Scan)

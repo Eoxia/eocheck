@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import apiRouter from './routes/api.js';
 import { db } from './db/index.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
 
@@ -64,10 +65,7 @@ app.use((req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('[Server Error]', err);
-  res.status(500).json({ error: 'Internal Server Error', message: err.message || 'An unexpected error occurred' });
-});
+app.use(errorHandler);
 
 // Start Express server
 app.listen(PORT, () => {

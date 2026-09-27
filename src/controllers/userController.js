@@ -1,14 +1,20 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 /**
  * Middleware ensuring current user is an admin
  */
 export function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden', message: 'Admin access required' });
+    const err = new Error('Admin access required');
+    err.code = 'ERR_USER_48';
+    return next(err);
   }
   next();
 }
@@ -16,54 +22,58 @@ export function requireAdmin(req, res, next) {
 /**
  * Admin: List all users with Nom, Prénom, Email, Role
  */
-export function listUsers(req, res) {
+export async function listUsers(req, res, next) {
   try {
-    const users = db
-      .prepare(
+    const [users] = await db.query(
         `SELECT users.id, users.email, users.first_name, users.last_name, users.role, users.created_at, 
                 COUNT(api_tokens.id) as token_count
-         FROM users 
-         LEFT JOIN api_tokens ON api_tokens.user_id = users.id 
+         FROM ${config.prefix}users users
+         LEFT JOIN ${config.prefix}api_tokens api_tokens ON api_tokens.user_id = users.id 
          GROUP BY users.id 
          ORDER BY users.created_at DESC`
-      )
-      .all();
+      );
 
     return res.json({ users });
   } catch (error) {
     console.error('[User Controller] List users error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to list users' });
+    const err = new Error('Failed to list users');
+    err.code = 'ERR_USER_49';
+    return next(err);
   }
 }
 
 /**
  * Admin: Create a new user or admin account with Nom and Prénom
  */
-export async function createUser(req, res) {
+export async function createUser(req, res, next) {
   try {
     const { email, password, first_name = '', last_name = '', role = 'user' } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Email and password are required' });
+      const err = new Error('Email and password are required');
+      err.code = 'ERR_USER_50';
+      return next(err);
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = (await db.query(`SELECT id FROM ${config.prefix}users WHERE email = ?`, [email]))[0][0];
     if (existingUser) {
-      return res.status(409).json({ error: 'Conflict', message: 'User with this email already exists' });
+      const err = new Error('User with this email already exists');
+      err.code = 'ERR_USER_51';
+      return next(err);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
     const validRole = role === 'admin' ? 'admin' : 'user';
 
-    db.prepare('INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?)').run(
+    await db.query(`INSERT INTO ${config.prefix}users (id, email, password_hash, role, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?)`, [
       userId,
       email,
       passwordHash,
       validRole,
       first_name,
       last_name
-    );
+    ]);
 
     return res.status(201).json({
       message: `Account (${validRole}) created successfully`,
@@ -71,25 +81,31 @@ export async function createUser(req, res) {
     });
   } catch (error) {
     console.error('[User Controller] Create user error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create user' });
+    const err = new Error('Failed to create user');
+    err.code = 'ERR_USER_52';
+    return next(err);
   }
 }
 
 /**
  * Admin: Generate an API token for a specific user
  */
-export function createTokenForUser(req, res) {
+export async function createTokenForUser(req, res, next) {
   try {
     const { userId } = req.params;
     const { name, client_app = 'api_client', expires_in_days } = req.body;
 
     if (!name) {
-      return res.status(400).json({ error: 'Bad Request', message: 'API Key name is required' });
+      const err = new Error('API Key name is required');
+      err.code = 'ERR_USER_53';
+      return next(err);
     }
 
-    const targetUser = db.prepare('SELECT id, email, first_name, last_name FROM users WHERE id = ?').get(userId);
+    const targetUser = (await db.query(`SELECT id, email, first_name, last_name FROM ${config.prefix}users WHERE id = ?`, [userId]))[0][0];
     if (!targetUser) {
-      return res.status(404).json({ error: 'Not Found', message: 'Target user not found' });
+      const err = new Error('Target user not found');
+      err.code = 'ERR_USER_54';
+      return next(err);
     }
 
     const randomBytes = crypto.randomBytes(32).toString('hex');
@@ -105,83 +121,92 @@ export function createTokenForUser(req, res) {
       expiresAt = date.toISOString();
     }
 
-    db.prepare(
-      `INSERT INTO api_tokens (id, user_id, token_hash, token_prefix, name, client_app, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(tokenId, userId, tokenHash, tokenPrefix, name, client_app, expiresAt);
+    await db.query(
+      `INSERT INTO ${config.prefix}api_tokens (id, user_id, token_hash, token_prefix, name, client_app, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       [tokenId, userId, tokenHash, tokenPrefix, name, client_app, expiresAt]
+    );
 
     return res.status(201).json({
       message: 'API Key allocated to user successfully',
-      token_id: tokenId,
-      user: targetUser,
-      name,
-      client_app,
-      api_token: rawToken,
-      token_prefix: tokenPrefix,
-      expires_at: expiresAt
+      token: rawToken,
+      id: tokenId,
+      prefix: tokenPrefix
     });
   } catch (error) {
     console.error('[User Controller] Create token for user error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to generate API Key for user' });
+    const err = new Error('Failed to generate API Key for user');
+    err.code = 'ERR_USER_56';
+    return next(err);
   }
 }
 
 /**
  * Admin: Delete a user
  */
-export function deleteUser(req, res) {
+export async function deleteUser(req, res, next) {
   try {
     const { id } = req.params;
 
     if (id === req.user.id) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Cannot delete your own account' });
+      const err = new Error('Cannot delete your own account');
+      err.code = 'ERR_USER_57';
+      return next(err);
     }
 
-    const result = db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    const [result] = await db.query(`DELETE FROM ${config.prefix}users WHERE id = ?`, [id]);
 
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+    if (result.affectedRows === 0) {
+      const err = new Error('User not found');
+      err.code = 'ERR_USER_58';
+      return next(err);
     }
 
     return res.json({ message: 'User account deleted successfully', user_id: id });
   } catch (error) {
     console.error('[User Controller] Delete user error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to delete user' });
+    const err = new Error('Failed to delete user');
+    err.code = 'ERR_USER_59';
+    return next(err);
   }
 }
 
 /**
  * Self: Update profile
  */
-export function updateProfile(req, res) {
+export async function updateProfile(req, res, next) {
   try {
     const { first_name, last_name, phone, email } = req.body;
     
     // Si l'utilisateur change d'e-mail, on doit s'assurer qu'il n'est pas déjà pris
     if (email && email !== req.user.email) {
-      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      const existing = (await db.query(`SELECT id FROM ${config.prefix}users WHERE email = ?`, [email]))[0][0];
       if (existing) {
-        return res.status(400).json({ error: 'Bad Request', message: 'Cette adresse e-mail est déjà utilisée.' });
+        const err = new Error('Cette adresse e-mail est déjà utilisée.');
+        err.code = 'ERR_USER_60';
+        return next(err);
       }
       
       // Mise à jour complète avec changement d'e-mail : on désactive la vérification
-      db.prepare(`
-        UPDATE users 
+      await db.query(`
+        UPDATE ${config.prefix}users 
         SET first_name = ?, last_name = ?, phone = ?, email = ?, email_verified = 0, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(first_name || '', last_name || '', phone || '', email, req.user.id);
+      `, [first_name || '', last_name || '', phone || '', email, req.user.id]);
     } else {
       // Simple mise à jour sans toucher à l'e-mail
-      db.prepare(`
-        UPDATE users 
+      await db.query(`
+        UPDATE ${config.prefix}users 
         SET first_name = ?, last_name = ?, phone = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(first_name || '', last_name || '', phone || '', req.user.id);
+      `, [first_name || '', last_name || '', phone || '', req.user.id]);
     }
 
     return res.json({ message: 'Profil mis à jour avec succès' });
   } catch (error) {
     console.error('[User Controller] Update profile error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update profile' });
+    const err = new Error('Failed to update profile');
+    err.code = 'ERR_USER_61';
+    return next(err);
   }
 }
