@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outils d'administration - EOCheck</title>
+  <style>
+    :root {
+      --dol-bg-top: #2c3e50;
+      --dol-bg-side: #f8f9fa;
+      --dol-text-side: #333;
+      --dol-border: #e9ecef;
+      --dol-link: #0056b3;
+      --dol-table-head: #f4f6f9;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: #fff;
+    }
+    /* Top Menu */
+    .top-menu {
+      background: var(--dol-bg-top);
+      color: #fff;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+    }
+    .top-menu a {
+      color: #ccc;
+      text-decoration: none;
+      margin-right: 20px;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .top-menu a:hover, .top-menu a.active {
+      color: #fff;
+    }
+    
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    /* Left Sidebar */
+    .sidebar {
+      width: 250px;
+      background: var(--dol-bg-side);
+      border-right: 1px solid var(--dol-border);
+      overflow-y: auto;
+      padding: 15px 0;
+    }
+    .search-box {
+      margin: 0 15px 20px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .menu-group {
+      margin-bottom: 20px;
+    }
+    .menu-title {
+      font-weight: bold;
+      padding: 10px 15px;
+      color: var(--dol-text-side);
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--dol-border);
+    }
+    .menu-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .menu-list li a {
+      display: block;
+      padding: 8px 15px 8px 35px;
+      color: #555;
+      text-decoration: none;
+      font-size: 13.5px;
+    }
+    .menu-list li a:hover, .menu-list li a.active {
+      background: #e9ecef;
+      color: #000;
+      font-weight: 500;
+    }
+
+    /* Content Area */
+    .content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .page-title {
+      font-size: 22px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      color: #333;
+    }
+    .page-title span { margin-left: 10px; }
+
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+      font-size: 13px;
+    }
+    .data-table th, .data-table td {
+      border: 1px solid var(--dol-border);
+      padding: 10px;
+      text-align: left;
+    }
+    .data-table th {
+      background: var(--dol-table-head);
+      color: #444;
+      font-weight: 600;
+    }
+    .data-table tr:hover {
+      background: #f8f9fa;
+    }
+
+    /* Section DB Info */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      border: 1px solid var(--dol-border);
+      border-bottom: none;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+    .info-grid > div {
+      padding: 12px 15px;
+      border-bottom: 1px solid var(--dol-border);
+    }
+    .info-grid .label {
+      background: #fbfbfb;
+      color: #555;
+    }
+
+    /* Tabs */
+    .tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid #ccc; }
+    .tab { padding: 10px 20px; cursor: pointer; color: #666; border-bottom: 2px solid transparent; }
+    .tab.active { color: var(--dol-link); border-bottom: 2px solid var(--dol-link); font-weight: bold; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    .status-ok { background: #d4edda; color: #155724; }
+    .status-err { background: #f8d7da; color: #721c24; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Menu Haut -->
+  <header class="top-menu">
+    <div style="font-weight:bold; font-size:18px; margin-right:40px;">EOCheck Admin</div>
+    <a href="index.html">🏠 Accueil</a>
+    <a href="scans.html">🔍 Scans</a>
+    <a href="users.html">👥 Utilisateurs</a>
+    <a href="admin.html" class="active">🛠️ Outils</a>
+    <div style="margin-left:auto;">Admin</div>
+  </header>
+
+  <div class="main-container">
+    
+    <!-- Menu Gauche -->
+    <aside class="sidebar">
+      <div class="search-box">
+        <input type="text" placeholder="Rechercher">
+      </div>
+      
+      <div class="menu-group">
+        <div class="menu-title">⚙️ Configuration</div>
+        <div class="menu-title" style="background:#eee;">🛠️ Outils d'administration</div>
+        <ul class="menu-list">
+          <li><a href="#" onclick="switchTab('tab-eocheck')">Infos EOCheck</a></li>
+          <li><a href="#" onclick="switchTab('tab-db-info')" class="active" id="link-db">Infos base de données</a></li>
+          <li><a href="#" onclick="switchTab('tab-tables')">Tables MariaDB</a></li>
+          <li><a href="#" onclick="switchTab('tab-audit')">Audit & Checksum</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Contenu Central -->
+    <main class="content">
+      
+      <div id="tab-db-info" class="tab-content active">
+        <div class="page-title">🛠️ <span>Infos base de données</span></div>
+        <div class="info-grid" id="dbInfoGrid">
+          <div class="label">Chargement...</div><div></div>
+        </div>
+      </div>
+
+      <div id="tab-tables" class="tab-content">
+        <div class="page-title">🛠️ <span>Tables MariaDB</span></div>
+        <table class="data-table" id="tablesGrid">
+          <thead>
+            <tr>
+              <th>Nom de la table</th>
+              <th>Type</th>
+              <th>Format</th>
+              <th>Nb d'enregistrements</th>
+              <th>Avg_row_length</th>
+              <th>Data_length</th>
+              <th>Max_Data_length</th>
+              <th>Collation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="8">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="tab-eocheck" class="tab-content">
+        <div class="page-title">🛠️ <span>Infos EOCheck</span></div>
+        <div class="info-grid">
+          <div class="label">Version actuelle EOCheck (API)</div>
+          <div>1.0.0</div>
+          <div class="label">Version de la structure (BDD)</div>
+          <div id="eoDbVersion">...</div>
+        </div>
+      </div>
+      
+      <div id="tab-audit" class="tab-content">
+        <div class="page-title">🛡️ <span>Audit d'intégrité (Checksum BDD)</span></div>
+        <p>Vérification de la présence des tables obligatoires du core EOCheck :</p>
+        <table class="data-table" id="auditGrid">
+          <thead>
+            <tr>
+              <th>Table Attendue</th>
+              <th>Présente ?</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3">Audit en cours...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="js/csrf.js"></script>
+  <script>
+    // Navigation Tabs
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.menu-list a').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Load Data from API
+    async function loadDbInfo() {
+      try {
+        const token = localStorage.getItem('eocheck_token');
+        if (!token) {
+          alert('Vous devez être connecté !');
+          window.location.href = 'login.html';
+          return;
+        }
+
+        const res = await fetch('/api/v1/system/db-info', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        
+        // 1. Fill DB Info Grid
+        const db = data.database;
+        const grid = document.getElementById('dbInfoGrid');
+        grid.innerHTML = `
+          <div class="label">Version</div><div>${db.type} ${db.version}</div>
+          <div class="label">Hôte de la base de données</div><div>${db.host}</div>
+          <div class="label">Port de la base de données</div><div>${db.port}</div>
+          <div class="label">Nom de la base de données</div><div>${db.name}</div>
+          <div class="label">Utilisateur</div><div>${db.user}</div>
+          <div class="label">Jeu de caractères pour le stockage</div><div>${db.charset}</div>
+          <div class="label">Jeu de caractères pour le tri</div><div>${db.collation}</div>
+          <div class="label">Préfixe des tables</div><div>${db.prefix}</div>
+        `;
+
+        // 2. Fill EOCheck Info
+        document.getElementById('eoDbVersion').innerText = data.eocheck.version;
+
+        // 3. Fill Tables Grid
+        const tGrid = document.querySelector('#tablesGrid tbody');
+        tGrid.innerHTML = '';
+        data.tables.forEach(t => {
+          tGrid.innerHTML += `
+            <tr>
+              <td>${t.name}</td>
+              <td>${t.engine}</td>
+              <td>${t.format}</td>
+              <td>${t.rows_count}</td>
+              <td>${t.avg_row_length}</td>
+              <td>${t.data_length}</td>
+              <td>${t.max_data_length}</td>
+              <td>${t.collation}</td>
+            </tr>
+          `;
+        });
+
+        // 4. Audit & Checksum
+        const expectedTables = ['const', 'users', 'user_groups', 'api_tokens', 'scans', 'scan_profiles', 'actioncomm', 'settings', 'login_logs', 'group_permissions', 'user_group_memberships'];
+        const auditGrid = document.querySelector('#auditGrid tbody');
+        auditGrid.innerHTML = '';
+        
+        expectedTables.forEach(t => {
+          const expectedName = db.prefix + t;
+          const found = data.tables.find(x => x.name === expectedName);
+          const ok = found ? true : false;
+          auditGrid.innerHTML += `
+            <tr>
+              <td>${expectedName}</td>
+              <td>${ok ? 'Oui' : 'Non'}</td>
+              <td><span class="status-badge ${ok ? 'status-ok' : 'status-err'}">${ok ? 'VALIDE' : 'MANQUANTE'}</span></td>
+            </tr>
+          `;
+        });
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDbInfo);
+  </script>
+</body>
+</html>

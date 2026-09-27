@@ -1,4 +1,8 @@
-import { db } from '../db/index.js';
+import { getDbConnection } from '../db/connection.js';
+import { getDbConfig } from '../config.js';
+
+const config = getDbConfig();
+const db = await getDbConnection();
 
 /**
  * Get normalized client IP address
@@ -17,13 +21,16 @@ export function getClientIp(req) {
 /**
  * Express Middleware enforcing IP Whitelist and IP Blacklist
  */
-export function enforceIpFilter(req, res, next) {
+export async function enforceIpFilter(req, res, next) {
   try {
     const clientIp = getClientIp(req);
 
     // Fetch IP blacklist and whitelist from database settings
-    const blacklistRow = db.prepare("SELECT value FROM settings WHERE key = 'ip_blacklist'").get();
-    const whitelistRow = db.prepare("SELECT value FROM settings WHERE key = 'ip_whitelist'").get();
+    const [blacklistRows] = await db.query("SELECT value FROM " + config.prefix + "settings WHERE `key` = 'ip_blacklist'");
+    const blacklistRow = blacklistRows[0];
+    
+    const [whitelistRows] = await db.query("SELECT value FROM " + config.prefix + "settings WHERE `key` = 'ip_whitelist'");
+    const whitelistRow = whitelistRows[0];
 
     const blacklist = blacklistRow ? JSON.parse(blacklistRow.value) : [];
     const whitelist = whitelistRow ? JSON.parse(whitelistRow.value) : [];
@@ -31,19 +38,13 @@ export function enforceIpFilter(req, res, next) {
     // Check Blacklist
     if (blacklist.includes(clientIp)) {
       console.warn(`[IP Filter] Blocked request from blacklisted IP: ${clientIp}`);
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: `L'accès depuis l'adresse IP ${clientIp} a été bloqué par la sécurité.`
-      });
+      return next(Object.assign(new Error(`L'accès depuis l'adresse IP ${clientIp} a été bloqué par la sécurité.`), { code: 'ERR_IP_BLACKLISTED' }));
     }
 
     // Check Whitelist if populated
     if (whitelist.length > 0 && !whitelist.includes(clientIp) && !whitelist.includes('127.0.0.1')) {
       console.warn(`[IP Filter] Blocked request from non-whitelisted IP: ${clientIp}`);
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: `L'adresse IP ${clientIp} n'est pas autorisée sur ce serveur.`
-      });
+      return next(Object.assign(new Error(`L'adresse IP ${clientIp} n'est pas autorisée sur ce serveur.`), { code: 'ERR_IP_NOT_WHITELISTED' }));
     }
 
     next();

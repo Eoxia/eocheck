@@ -1,82 +1,88 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { DatabaseSync as Database } from 'node:sqlite';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { getDbConnection } from './connection.js';
+import { getDbConfig } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = process.env.DATABASE_URL
-  ? process.env.DATABASE_URL.replace(/^sqlite:\/\//, '')
-  : './data/eocheck.db';
+export async function runMigrations() {
+  const pool = await getDbConnection();
+  const config = getDbConfig();
+  
+  console.log(`[DB Migrator] Connexion à MariaDB (${config.database})`);
 
-// Ensure data directory exists
-const resolvedDbPath = path.resolve(process.cwd(), dbPath);
-const dataDir = path.dirname(resolvedDbPath);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-export function runMigrations() {
-  console.log(`[DB Migrator] Connecting to SQLite database at: ${resolvedDbPath}`);
-  const db = new Database(resolvedDbPath);
-  db.exec('PRAGMA journal_mode = WAL;');
-
-  // Ensure migrations table exists
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // Get applied versions
-  const appliedRows = db.prepare('SELECT version FROM schema_migrations ORDER BY version ASC').all();
-  const appliedVersions = new Set(appliedRows.map((r) => r.version));
-
-  // Find all migration files
-  const migrationsDir = path.join(__dirname, 'migrations');
-  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.js')).sort();
-
-  console.log(`[DB Migrator] Found ${files.length} migration file(s).`);
-
-  for (const file of files) {
-    const filePath = path.join(migrationsDir, file);
-    const fileUrl = `file:///${filePath.replace(/\\/g, '/')}`;
-    
-    // Import migration dynamically
-    import(fileUrl).then((migration) => {
-      if (!appliedVersions.has(migration.version)) {
-        console.log(`[DB Migrator] Applying migration ${migration.version}_${migration.name}...`);
-        try {
-          db.exec('BEGIN');
-          migration.up(db);
-          db.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(
-            migration.version,
-            migration.name
-          );
-          db.exec('COMMIT');
-          console.log(`[DB Migrator] Migration ${migration.version}_${migration.name} successfully applied.`);
-        } catch (e) {
-          db.exec('ROLLBACK');
-          throw e;
-        }
-      } else {
-        console.log(`[DB Migrator] Migration ${migration.version}_${migration.name} already applied.`);
+  try {
+    // 1. Récupérer la version actuelle
+    let currentVersion = '0.0.0';
+    try {
+      const [rows] = await pool.query(`SELECT value FROM ${config.prefix}const WHERE name = 'MAIN_DB_VERSION'`);
+      if (rows.length > 0) {
+        currentVersion = rows[0].value;
       }
-    }).catch((err) => {
-      console.error(`[DB Migrator] Error applying migration ${file}:`, err);
-    });
-  }
+    } catch (err) {
+      console.warn(`[DB Migrator] Impossible de lire la version (la base n'est peut-être pas installée). Erreur: ${err.message}`);
+      return;
+    }
 
-  return db;
+    console.log(`[DB Migrator] Version actuelle de la base : ${currentVersion}`);
+
+    // 2. Trouver tous les fichiers de migration
+    const migrationsDir = path.resolve(__dirname, '../../install/mysql/migration');
+    if (!fs.existsSync(migrationsDir)) {
+      console.log(`[DB Migrator] Aucun dossier de migration trouvé.`);
+      return;
+    }
+
+    const files = fs.readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      // Trie basique (Dolibarr utilise un tri complexe pour les versions, on simplifie pour l'exemple)
+      .sort(); 
+
+    let appliedCount = 0;
+
+    for (const file of files) {
+      // Nom du fichier type: 1.0.0-1.1.0.sql
+      const match = file.match(/^([\d\.]+)-([\d\.]+)\.sql$/);
+      if (match) {
+        const targetVersion = match[2];
+        
+        // Comparaison simplifiée de versions (à améliorer si versions complexes type 1.10.0 > 1.2.0)
+        // Pour l'instant, un simple localeCompare fonctionne sur les mêmes nombres de digits.
+        if (targetVersion.localeCompare(currentVersion, undefined, { numeric: true, sensitivity: 'base' }) > 0) {
+          console.log(`[DB Migrator] Application de la migration : ${file}...`);
+          
+          const filePath = path.join(migrationsDir, file);
+          let sqlContent = fs.readFileSync(filePath, 'utf8');
+          
+          // Remplacement dynamique du préfixe Dolibarr-like (llx_)
+          sqlContent = sqlContent.replace(/llx_/g, config.prefix);
+          
+          // Exécution du script de migration
+          await pool.query(sqlContent);
+          appliedCount++;
+          
+          // Mise à jour de la version courante en mémoire
+          currentVersion = targetVersion;
+          console.log(`[DB Migrator] Migration ${file} appliquée avec succès.`);
+        }
+      }
+    }
+
+    if (appliedCount === 0) {
+      console.log(`[DB Migrator] La base de données est à jour.`);
+    } else {
+      console.log(`[DB Migrator] ${appliedCount} migration(s) appliquée(s). Nouvelle version : ${currentVersion}`);
+    }
+
+  } catch (err) {
+    console.error('[DB Migrator] Erreur lors de la migration :', err);
+    throw err;
+  }
 }
 
-// Run directly if invoked from CLI
-if (process.argv[1] && process.argv[1].includes('migrator.js')) {
-  runMigrations();
+// Exécuter si appelé directement
+if (process.argv[1] && process.argv[1].endsWith('migrator.js')) {
+  runMigrations().then(() => process.exit(0)).catch(() => process.exit(1));
 }

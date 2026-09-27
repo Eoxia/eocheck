@@ -291,7 +291,7 @@ async function handleLogin(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur de connexion');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur de connexion');
 
     authToken = data.token;
     localStorage.setItem('eocheck_token', authToken);
@@ -322,7 +322,7 @@ async function handleRegister(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || "Erreur lors de l'inscription");
+    if (!res.ok) throw new Error((data['short description'] || data.message) || "Erreur lors de l'inscription");
 
     showToast(`Compte créé avec succès ! (${data.user.role})`, 'success');
     authToken = data.token;
@@ -402,7 +402,7 @@ async function rescanTargetByScanId(scanId) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors du relancement du scan');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors du relancement du scan');
 
     showToast(`Scan relancé avec les MÊMES paramètres conservés ! (ID: ${data.scan_id})`, 'success', 5000);
     loadScans();
@@ -605,7 +605,7 @@ async function handleCreateScan(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors du lancement du scan');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors du lancement du scan');
 
     showToast(`Scan lancé avec succès ! ID: ${data.scan_id}`, 'success', 6000);
     loadScans();
@@ -684,7 +684,8 @@ async function viewScanDetails(scanId) {
           <span>📸 <b>Captures d'écran :</b> ${opts.takeScreenshots !== false ? 'Oui' : 'Non'}</span>
           <span>🍪 <b>Cookies :</b> ${opts.inspectCookies !== false ? 'Oui' : 'Non'}</span>
           <span>🚨 <b>Traqueurs :</b> ${opts.inspectTrackers !== false ? 'Oui' : 'Non'}</span>
-          <span>👆 <b>Action Auto Cookies :</b> ${opts.cookieAction === 'accept' ? 'Accepter tous' : (opts.cookieAction === 'reject' ? 'Refuser tous' : 'Ignorer')}</span>
+          <span>👆 <b>Action sur les cookies :</b> ${opts.cookieAction === 'accept' ? 'Accepter tous' : (opts.cookieAction === 'reject' ? 'Refuser tous' : 'Ignorer')}</span>
+          ${result.cookie_consent_id ? `<span>🔑 <b>ID Consentement (LocalStorage) :</b> ${escapeHtml(result.cookie_consent_id)}</span>` : ''}
         </div>
       </div>
 
@@ -729,6 +730,13 @@ async function viewScanDetails(scanId) {
           <ul style="padding-left: 1.2rem; color: var(--text-main); font-size: 0.9rem;">
             ${privacy.session_recorders_detected.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
           </ul>
+        </div>
+      ` : ''}
+
+      ${result.appendix && result.appendix.sitemap ? `
+        <div style="margin-bottom: 1.5rem; background: rgba(0, 0, 0, 0.3); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <h4 style="font-size: 0.95rem; color: var(--accent-indigo); margin-bottom: 0.5rem;">📎 Annexe : ${escapeHtml(result.appendix.sitemap.name)}</h4>
+          <textarea readonly class="form-control" style="width: 100%; height: 200px; font-family: monospace; font-size: 0.8rem; background: #0b0f19; color: #a1a1aa; border: 1px solid var(--border-color);">${escapeHtml(result.appendix.sitemap.content)}</textarea>
         </div>
       ` : ''}
 
@@ -841,7 +849,7 @@ async function handleSaveDefaults(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde');
 
     showToast('Valeurs par défaut enregistrées', 'success');
   } catch (err) {
@@ -880,7 +888,7 @@ async function handleSaveSmtpSettings(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde');
 
     showToast('Configuration SMTP enregistrée', 'success');
   } catch (err) {
@@ -903,7 +911,7 @@ async function handleTestSmtp() {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors du test SMTP');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors du test SMTP');
     showToast(data.message, 'success');
   } catch (err) {
     showToast(err.message, 'error');
@@ -925,7 +933,7 @@ async function loadEmailTemplates() {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors du chargement des modèles');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors du chargement des modèles');
 
     tbody.innerHTML = '';
     const templates = data.templates;
@@ -1038,7 +1046,7 @@ async function handleSaveEmailTemplate(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde du modèle');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde du modèle');
 
     showToast('Modèle mis à jour', 'success');
     closeModal('editTemplateModal');
@@ -1058,7 +1066,7 @@ async function handleResetEmailTemplate(key) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la réinitialisation');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la réinitialisation');
 
     showToast('Modèle réinitialisé', 'success');
     loadEmailTemplates();
@@ -1101,7 +1109,7 @@ async function handleSaveScanSettings(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde');
 
     showToast('Paramètres de scan enregistrés avec succès', 'success');
   } catch (err) {
@@ -1140,7 +1148,7 @@ async function handleSaveIpSettings() {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde');
 
     showToast("Listes de filtrage d'IP enregistrées avec succès", 'success');
   } catch (err) {
@@ -1337,7 +1345,7 @@ async function handleCreateToken(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur de génération');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur de génération');
 
     closeModal('createTokenModal');
     currentRawTokenToCopy = data.api_token;
@@ -1402,7 +1410,7 @@ async function handleCreateUserAdmin(event) {
     }
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la création du compte');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la création du compte');
 
     showToast(`Compte pour ${email} créé avec succès (${data.user.role}) !`, 'success');
     closeModal('createUserModal');
@@ -1518,7 +1526,7 @@ async function handleUpdateProfile(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la sauvegarde');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la sauvegarde');
 
     showToast('Profil mis à jour avec succès', 'success');
     await fetchProfile(); // Refresh current user
@@ -1539,7 +1547,7 @@ async function requestEmailVerificationCode() {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur lors de la demande de code');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur lors de la demande de code');
 
     showToast('Code de vérification envoyé à votre adresse e-mail', 'success');
     openModal('verifyEmailModal');
@@ -1560,7 +1568,7 @@ async function confirmEmailVerificationCode(event) {
     });
 
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Erreur de vérification');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Erreur de vérification');
 
     showToast('E-mail vérifié avec succès !', 'success');
     closeModal('verifyEmailModal');
@@ -1642,7 +1650,7 @@ async function loadScanProfiles() {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
     const data = await parseJsonResponse(res);
-    if (!res.ok) throw new Error(data.message || 'Error loading profiles');
+    if (!res.ok) throw new Error((data['short description'] || data.message) || 'Error loading profiles');
 
     allProfilesCache = data.profiles || [];
     tbody.innerHTML = '';
@@ -1736,6 +1744,9 @@ function openScanProfileModal() {
   document.getElementById('profileCookies').checked = true;
   document.getElementById('profileTrackers').checked = true;
   document.getElementById('profileScreenshots').checked = false;
+  document.getElementById('profileUseSitemapOnly').checked = false;
+  document.getElementById('profileSitemapIndexScan').checked = true;
+  document.getElementById('profileSitemapIndexMax').value = 5;
   
   const radioNone = document.querySelector('input[name="profileCookieAction"][value="none"]');
   if (radioNone) radioNone.checked = true;
@@ -1758,6 +1769,9 @@ function editScanProfile(id) {
   document.getElementById('profileCookies').checked = !!profile.inspect_cookies;
   document.getElementById('profileTrackers').checked = !!profile.detect_trackers;
   document.getElementById('profileScreenshots').checked = !!profile.capture_images;
+  document.getElementById('profileUseSitemapOnly').checked = !!profile.use_sitemap_only;
+  document.getElementById('profileSitemapIndexScan').checked = profile.sitemap_index_scan !== undefined ? !!profile.sitemap_index_scan : true;
+  document.getElementById('profileSitemapIndexMax').value = profile.sitemap_index_max !== undefined ? profile.sitemap_index_max : 5;
   
   const actionRadios = document.querySelectorAll('input[name="profileCookieAction"]');
   actionRadios.forEach(r => {
@@ -1780,6 +1794,9 @@ async function handleSaveScanProfile(event) {
   const inspect_cookies = document.getElementById('profileCookies').checked ? 1 : 0;
   const detect_trackers = document.getElementById('profileTrackers').checked ? 1 : 0;
   const capture_images = document.getElementById('profileScreenshots').checked ? 1 : 0;
+  const use_sitemap_only = document.getElementById('profileUseSitemapOnly').checked ? 1 : 0;
+  const sitemap_index_scan = document.getElementById('profileSitemapIndexScan').checked ? 1 : 0;
+  const sitemap_index_max = parseInt(document.getElementById('profileSitemapIndexMax').value, 10);
   
   const cookieActionEl = document.querySelector('input[name="profileCookieAction"]:checked');
   const cookie_action = cookieActionEl ? cookieActionEl.value : 'none';
@@ -1789,7 +1806,7 @@ async function handleSaveScanProfile(event) {
   const payload = {
     label, description, max_pages, timeout_secs, max_depth,
     headless, inspect_cookies, detect_trackers, capture_images, cookie_action,
-    fk_usergroup
+    use_sitemap_only, sitemap_index_scan, sitemap_index_max, fk_usergroup
   };
 
   try {
